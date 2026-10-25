@@ -1,0 +1,68 @@
+// working = Claude is producing output; waiting = a tool call is pending and the terminal went quiet (permission prompt / question);
+// idle = turn finished; limit = a usage limit was hit (applies to every live chat); ended = process exited
+export type Status = 'working' | 'idle' | 'waiting' | 'limit' | 'ended'
+export type SubInfo = { id: string; title: string; status: Status; feed: string[] }
+export type ChatInfo = {
+  id: string
+  cwd: string
+  sessionId: string
+  status: Status
+  model: string | null
+  branch: string | null
+  tps: number | null
+  feed: string[]
+  subagents: SubInfo[]
+  limitResetAt: number | null // while status is 'limit': when it lifts (epoch ms), if the notice said
+  contextTokens: number | null // size of the latest request (what's in the window now)
+  contextWindow: number | null // window of that model, if known
+  costUSD: number | null // estimated spend, only for models with a verified price
+  prompt: string | null // a tool-permission question the card can answer with Yes / No buttons, while waiting on one
+  resumable: boolean // ended (or restored from a previous run) and has a transcript, so a click can resume it
+}
+export type Pt = { x: number; y: number }
+// world coordinates: clusters[cwd] is the folder hub's centre; cards[sessionId] is the card's offset from its hub
+// titles: names the user gave cards; view: where the board was panned/zoomed to (absent = keep it framed automatically)
+// collapsed: folders whose cards are folded away; hideEnded: hide gray (ended / restored) cards
+export type Layout = {
+  clusters: Record<string, Pt>
+  cards: Record<string, Pt>
+  titles: Record<string, string>
+  collapsed: Record<string, boolean>
+  hideEnded: boolean
+  view?: { x: number; y: number; k: number }
+}
+export const emptyLayout = (): Layout => ({ clusters: {}, cards: {}, titles: {}, collapsed: {}, hideEnded: false })
+
+export const DEFAULT_TERM_FONT = 'Terminal (SF Mono)'
+export type Theme = 'dark' | 'light' | 'midnight'
+export type StateKey = 'working' | 'idle' | 'waiting' | 'limit' | 'ended'
+export type Settings = {
+  theme: Theme
+  colors: Record<StateKey, string> // outline / dot / line colour per status
+  cardW: number
+  cardH: number
+  radius: number // card corner radius
+  cardFont: number // card text size
+  lineWidth: number
+  curved: boolean // curved instead of straight links
+  grid: boolean // dotted board background
+  motion: boolean // easing and animations
+  termFont: number // chat view font size
+  termFontFamily: string // chat view font (DEFAULT_TERM_FONT = Terminal.app's SF Mono)
+  notifications: boolean // macOS notification + Dock badge when a chat needs you
+}
+export const defaultSettings: Settings = {
+  theme: 'dark',
+  colors: { working: '#3fb950', idle: '#000000', waiting: '#f0883e', limit: '#f85149', ended: '#666666' },
+  cardW: 220,
+  cardH: 150,
+  radius: 12,
+  cardFont: 11,
+  lineWidth: 2.5,
+  curved: false,
+  grid: true,
+  motion: true,
+  termFont: 12,
+  termFontFamily: 'Terminal (SF Mono)',
+  notifications: true,
+}

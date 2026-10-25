@@ -1,0 +1,73 @@
+{
+  "name": "claude-board",
+  "version": "1.0.0",
+  "description": "One window for all your terminal Claude Code chats",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc",
+    "dev": "node build.mjs && electron .",
+    "rebuild": "electron-rebuild -f -w node-pty",
+    "postinstall": "electron-rebuild -f -w node-pty",
+    "test": "node --test src/*.test.mts",
+    "scan": "node src/scan-cli.mts",
+    "package": "npm run build && electron-builder --mac dir && codesign --force --deep --sign - \"release/mac-arm64/Claude Board.app\"",
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:fast": "node scripts/smoke.mjs --fast",
+    "check": "npm run typecheck && npm test && npm run smoke:fast"
+  },
+  "type": "commonjs",
+  "dependencies": {
+    "@xterm/addon-search": "^0.16.0",
+    "node-pty": "^1.1.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.1",
+    "@types/node": "^26.6.5",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-unicode11": "^0.9.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/addon-webgl": "^0.19.0",
+    "@xterm/headless": "^6.0.0",
+    "@xterm/xterm": "^6.0.0",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "node-pty@1.1.0": true,
+    "electron-winstaller": false
+  },
+  "private": true,
+  "build": {
+    "appId": "local.claudeboard.app",
+    "productName": "Claude Board",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/node-pty/**"
+    ],
+    "npmRebuild": false,
+    "mac": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.icns",
+      "identity": null,
+      "category": "public.app-category.developer-tools"
+    }
+  }
+}

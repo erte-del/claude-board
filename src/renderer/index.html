@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src file:" />
+    <link rel="stylesheet" href="renderer.css" />
+    <title>Claude Board</title>
+  </head>
+  <body>
+    <section id="home" class="view">
+      <header class="topbar">
+        <h1>Claude Board</h1>
+        <input id="filter" type="search" spellcheck="false" placeholder="Filter chats   ⌘F" />
+        <span id="filter-count"></span>
+        <button id="hide-ended" class="toggle" aria-pressed="false" title="Hide gray (ended or restored) chats">Hide ended</button>
+        <span class="spacer"></span>
+        <button id="arrange" class="icon" title="Auto-arrange the board (⌘⇧A)"></button>
+        <button id="add" title="Add an existing chat (⌘O)">Add existing</button>
+        <button id="new" class="primary" title="New chat (⌘N)">+ New chat</button>
+        <button id="gear" class="icon" title="Customize (⌘,)"></button>
+      </header>
+      <div id="banner" hidden><span id="banner-text"></span><button id="banner-retry">Retry</button></div>
+      <div id="board"></div>
+      <form id="newchat" class="popover" autocomplete="off">
+        <div class="cmdrow"><span class="prompt">❯</span><input id="cmd" type="text" spellcheck="false" placeholder="cd ~/path/to/project" /></div>
+        <div class="cmdfoot"><span id="cmd-error"></span><button type="button" id="browse">Browse folders…</button></div>
+      </form>
+      <div id="picker" class="popover wide">
+        <div class="cmdrow"><span class="prompt">⌕</span><input id="search" type="text" spellcheck="false" placeholder="Search your Claude Code chats…" /></div>
+        <div id="results"></div>
+        <div class="cmdfoot"><span id="picker-note">Close a chat in its other terminal before resuming it here.</span></div>
+      </div>
+      <aside id="settings" class="drawer"></aside>
+    </section>
+    <section id="chat" class="view" hidden>
+      <div id="bar">
+        <button id="back" class="ghost" title="Back to board (⌘⇧B)"></button>
+        <span id="chat-name"></span>
+        <span id="chat-path"></span>
+        <span class="spacer"></span>
+        <button id="split" class="ghost" title="Show another chat beside this one (⌘\)">Split</button>
+        <span id="chat-dot" class="dot"></span>
+      </div>
+      <div id="wrap"></div>
+      <div id="find" class="findbar">
+        <input id="find-input" type="text" spellcheck="false" placeholder="Find in scrollback" />
+        <span id="find-count"></span>
+        <button id="find-case" class="toggle" title="Match case">Aa</button>
+        <button id="find-prev" class="icon" title="Previous (⇧Enter)">↑</button>
+        <button id="find-next" class="icon" title="Next (Enter)">↓</button>
+        <button id="find-close" class="icon" title="Close (Esc)">✕</button>
+      </div>
+      <div id="split-menu" class="popover menu"></div>
+    </section>
+    <script src="renderer.js"></script>
+  </body>
+</html>

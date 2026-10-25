@@ -1,0 +1,120 @@
+#!/usr/bin/env node
+// A stand-in for the real `claude`, for the smoke tests: a real program on a real pty that writes real-format transcripts, but
+// replies instantly, costs nothing, and can be told to misbehave. Type one of these at its prompt:
+//   ask          show a permission dialog (as the real one words it) and wait for 1 / Enter / Esc
+//   sleep N      show a working spinner for N seconds, then reply
+//   limit S      hit a usage limit that lifts at the next whole minute at least S seconds away
+//   agent        start a sub-agent that finishes after a few seconds
+//   crash        print an error and exit with code 1
+//   exit         exit normally
+//   anything else: replies "echo: <text>"
+const fs = require('fs')
+const path = require('path')
+
+const args = process.argv.slice(2)
+const flag = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null }
+const resumed = args.includes('--resume')
+const sid = flag('--session-id') || flag('--resume') || 'stub-session'
+const cwd = process.cwd()
+const dir = path.join(process.env.HOME, '.claude', 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'))
+const file = path.join(dir, `${sid}.jsonl`)
+const now = () => new Date().toISOString()
+const write = (s) => process.stdout.write(s)
+
+const append = (entry) => {
+  fs.mkdirSync(dir, { recursive: true })
+  fs.appendFileSync(file, JSON.stringify({ sessionId: sid, cwd, gitBranch: 'main', timestamp: now(), ...entry }) + '\n')
+}
+let n = 0
+if (resumed && fs.existsSync(file)) n = fs.readFileSync(file, 'utf8').split('\n').filter((l) => l.includes('"type":"assistant"')).length
+
+// Fixed usage per reply, so cost and context are predictable: 1000 in, 50 out, 20000 cache read, 500 cache write (1h)
+// => 1000*$2 + 50*$10 + 20000*$0.10 + 500*$4 = $0.0065 per reply at Sonnet 5.5 prices; context = 21500 tokens.
+const usage = { input_tokens: 1000, output_tokens: 50, cache_read_input_tokens: 20000, cache_creation_input_tokens: 500, cache_creation: { ephemeral_1h_input_tokens: 500, ephemeral_5m_input_tokens: 0 } }
+const user = (text) => append({ type: 'user', message: { role: 'user', content: text } })
+const assistant = (text) => append({ type: 'assistant', message: { id: `msg_${sid.slice(0, 6)}_${++n}`, model: 'claude-sonnet-5-5', role: 'assistant', content: [{ type: 'text', text }], usage } })
+
+write('\x1b[?2004h') // bracketed paste on, like the real one
+write(`Stub Claude Code · ${path.basename(cwd)}${resumed ? ' · resumed' : ''}\r\nSonnet 5.5 · Claude Max\r\n`)
+const prompt = () => write('\r\n❯ ')
+prompt()
+
+let line = ''
+let mode = 'input' // 'input' | 'dialog' | 'busy'
+
+function reply(text) {
+  assistant(text)
+  write(`\r\x1b[K● ${text}\r\n`)
+  mode = 'input'
+  prompt()
+}
+
+function submit(text) {
+  write('\r\n')
+  user(text)
+  const [cmd, arg] = text.trim().split(/\s+/)
+  if (cmd === 'exit') process.exit(0)
+  if (cmd === 'crash') { process.stderr.write('fatal: stub crash\n'); process.exit(1) }
+  if (cmd === 'ask') {
+    mode = 'dialog'
+    write(' touch stub-file\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. Yes, and don’t ask again for: touch *\r\n  3. Yes, and switch to auto mode') // the real wording; digits answer at once
+    return
+  }
+  if (cmd === 'sleep') {
+    mode = 'busy'
+    const until = Date.now() + (Number(arg) || 2) * 1000
+    const t = setInterval(() => {
+      write(`\r\x1b[K✻ Working… (esc to interrupt) ${Math.ceil((until - Date.now()) / 1000)}s`)
+      if (Date.now() >= until) { clearInterval(t); reply('done sleeping') }
+    }, 200)
+    return
+  }
+  if (cmd === 'limit') {
+    const reset = new Date(Math.ceil((Date.now() + (Number(arg) || 20) * 1000) / 60000) * 60000)
+    const h = reset.getUTCHours(), m = reset.getUTCMinutes()
+    const label = `${h % 12 || 12}:${String(m).padStart(2, '0')}${h < 12 ? 'am' : 'pm'}`
+    const notice = `You've hit your session limit · resets ${label} (UTC)`
+    append({ type: 'assistant', error: 'rate_limit', message: { model: '<synthetic>', content: [{ type: 'text', text: notice }] } })
+    write(`${notice}\r\n`)
+    mode = 'input'
+    prompt()
+    return
+  }
+  if (cmd === 'agent') {
+    const sub = path.join(dir, sid, 'subagents')
+    fs.mkdirSync(sub, { recursive: true })
+    const meta = (finished) => fs.writeFileSync(path.join(sub, 'agent-stub1.meta.json'), JSON.stringify({ agentType: 'general-purpose', description: 'Stub helper', finished }))
+    const sidechain = (message) => fs.appendFileSync(path.join(sub, 'agent-stub1.jsonl'), JSON.stringify({ type: 'assistant', isSidechain: true, agentId: 'stub1', sessionId: sid, cwd, timestamp: now(), message }) + '\n')
+    meta(false)
+    sidechain({ id: 'sub_1', model: 'claude-sonnet-5-5', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'sleep 3' } }], usage: { output_tokens: 100 } })
+    write('Started a stub sub-agent…\r\n')
+    setTimeout(() => { sidechain({ id: 'sub_2', model: 'claude-sonnet-5-5', content: [{ type: 'text', text: 'helper finished' }], usage: { output_tokens: 20 } }); meta(true) }, 4000)
+    reply('started a helper')
+    return
+  }
+  reply(`echo: ${text}`)
+}
+
+process.stdin.setRawMode(true)
+process.stdin.setEncoding('utf8')
+process.stdin.resume()
+let pasting = false
+process.stdin.on('data', (chunk) => {
+  if (mode === 'busy') return
+  for (const part of chunk.split(/(\x1b\[200~|\x1b\[201~)/)) {
+    if (part === '\x1b[200~') { pasting = true; continue }
+    if (part === '\x1b[201~') { pasting = false; continue }
+    if (mode === 'dialog') {
+      const erase = '\r\x1b[4A\x1b[J' // the dialog is 5 lines tall: move to its first line and clear it, like the real one
+      if (part.includes('\r') || part === '1') { write(erase); return reply('answered: yes') }
+      if (part === '2' || part === '3') { write(erase); return reply(`answered: option ${part}`) }
+      if (part === '\x1b') { write(erase); return reply('answered: no') }
+      continue
+    }
+    for (const ch of part) {
+      if (ch === '\r' && !pasting) { const text = line; line = ''; return submit(text) }
+      if (ch === '\x7f') { if (line) { line = line.slice(0, -1); write('\b \b') } continue }
+      if (ch >= ' ') { line += ch; write(ch) }
+    }
+  }
+})

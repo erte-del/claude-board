@@ -1,0 +1,296 @@
+@font-face {
+  font-family: 'TermSF';
+  src: url('file:///System/Applications/Utilities/Terminal.app/Contents/Resources/Fonts/SFMono-Terminal.ttf');
+}
+
+/* ---- tokens: restyle here. Themes override the palette; the settings drawer overrides the rest at runtime. ---- */
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --font-mono: TermSF, Menlo, monospace;
+
+  /* palette (dark) */
+  --bg: #161618;
+  --fg: #ececf0;
+  --muted: rgba(236, 236, 240, 0.55);
+  --line: #38383c;
+  --btn: #2a2a2e;
+  --btn-hover: #36363b;
+  --accent: #4c9aff;
+  --panel: #212124;
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  --board-bg: #2b2b2e;
+  --dots: rgba(255, 255, 255, 0.07);
+  --card: #1c1c1e;
+  --mini: #26262a;
+  --hub-bg: #3a3a3e;
+  --hub-line: #56565b;
+  --term-bg: #1e1e1e; /* the terminal stays dark in every theme, like Terminal.app's profile */
+
+  /* status colours (settings) */
+  --c-working: #3fb950;
+  --c-idle: #000;
+  --c-waiting: #f0883e;
+  --c-limit: #f85149;
+  --c-ended: #666;
+
+  /* geometry + motion (settings) */
+  --radius: 12px;
+  --line-w: 2.5px;
+  --card-font: 11px;
+  --glide: 0.35s cubic-bezier(0.3, 0.7, 0.2, 1);
+  --fade: 0.35s ease;
+}
+:root[data-theme='light'] {
+  --bg: #f4f5f7; --fg: #1d1d1f; --muted: rgba(29, 29, 31, 0.55); --line: #d5d8de;
+  --btn: #ffffff; --btn-hover: #eceef2; --panel: #ffffff; --shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+  --board-bg: #e8eaee; --dots: rgba(0, 0, 0, 0.1); --card: #ffffff; --mini: #f3f4f7; --hub-bg: #ffffff; --hub-line: #c4c8d0;
+}
+:root[data-theme='midnight'] {
+  --bg: #0a0e19; --fg: #e4e9ff; --muted: rgba(228, 233, 255, 0.55); --line: #222a44;
+  --btn: #172036; --btn-hover: #1f2a47; --panel: #121a2e; --accent: #6ea8ff;
+  --board-bg: #141b30; --dots: rgba(255, 255, 255, 0.06); --card: #0c1222; --mini: #151d33; --hub-bg: #1d2848; --hub-line: #34426b;
+}
+:root.no-motion { --glide: 0s; --fade: 0s; }
+:root.no-motion .f, :root.no-motion .view, :root.no-motion .popover, :root.no-motion .drawer { animation: none; transition: none; }
+@media (prefers-reduced-motion: reduce) { :root { --glide: 0s; --fade: 0s; } .f, .view { animation: none; } }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 13px/1.4 var(--font-ui); -webkit-font-smoothing: antialiased; overflow: hidden; }
+.spacer { flex: 1; }
+.view { position: absolute; inset: 0; display: flex; flex-direction: column; animation: viewin 0.22s ease-out; }
+@keyframes viewin { from { opacity: 0; } }
+
+/* ---- controls ---- */
+button { font: inherit; color: var(--fg); background: var(--btn); border: 1px solid var(--line); border-radius: 8px; padding: 5px 12px; cursor: pointer; transition: background 0.15s, border-color 0.15s, transform 0.1s; }
+button:hover { background: var(--btn-hover); }
+button:active { transform: scale(0.97); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button.primary { background: var(--accent); border-color: transparent; color: #fff; font-weight: 600; }
+button.primary:hover { filter: brightness(1.1); background: var(--accent); }
+button.icon { width: 30px; height: 30px; padding: 0; display: grid; place-items: center; }
+button.icon svg, button.ghost svg { width: 16px; height: 16px; }
+button.ghost { background: transparent; border-color: transparent; display: flex; align-items: center; gap: 4px; padding: 4px 10px 4px 6px; }
+button.ghost:hover { background: var(--btn-hover); }
+
+/* ---- board view ---- */
+.topbar { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px 0 20px; flex: none; border-bottom: 1px solid var(--line); }
+.topbar h1 { font-size: 14px; font-weight: 650; letter-spacing: 0.01em; margin: 0; }
+
+#filter { width: 210px; height: 30px; margin-left: 14px; padding: 0 12px; border-radius: 999px; background: var(--btn); color: var(--fg); border: 1px solid var(--line); font: 12px var(--font-ui); outline: none; }
+#filter:focus { border-color: var(--accent); }
+#filter::placeholder { color: var(--muted); }
+#filter::-webkit-search-cancel-button { display: none; }
+#filter-count { color: var(--muted); font-size: 12px; min-width: 44px; font-variant-numeric: tabular-nums; }
+button.toggle { padding: 4px 10px; font-size: 12px; }
+button.toggle.on { background: var(--accent); border-color: transparent; color: #fff; }
+
+/* graph board: #board is the viewport, .world is panned/zoomed by a transform */
+#board { flex: 1; min-height: 0; overflow: hidden; position: relative; background-color: var(--board-bg); cursor: grab; }
+#board.grid { background-image: radial-gradient(circle, var(--dots) 1.3px, transparent 1.6px); }
+#board:active { cursor: grabbing; }
+.world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
+.lines { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.lines path { fill: none; stroke-linecap: round; stroke-width: var(--line-w); stroke: var(--c-idle); transition: d var(--glide), stroke var(--fade); }
+.lines .s-working { stroke: var(--c-working); }
+.lines .s-waiting { stroke: var(--c-waiting); }
+.lines .s-limit { stroke: var(--c-limit); }
+.lines .s-ended { stroke: var(--c-ended); }
+.empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--muted); pointer-events: none; }
+.empty b { color: var(--fg); font-size: 15px; font-weight: 600; }
+
+/* ---- nodes: everything glides, except while dragging (must track the pointer) and on a new element's first frame ---- */
+.hub { position: absolute; left: 0; top: 0; z-index: 2; padding: 6px 14px; border-radius: 999px; background: var(--hub-bg); border: 1px solid var(--hub-line); font-size: 12px; font-weight: 650; white-space: nowrap; cursor: grab; user-select: none; box-shadow: var(--shadow); transition: transform var(--glide); }
+
+.card { position: absolute; left: 0; top: 0; z-index: 2; width: 220px; height: 150px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; background: var(--card); border: 2px solid var(--c-idle); border-radius: var(--radius); cursor: pointer; user-select: none; box-shadow: var(--shadow); font-size: var(--card-font); /* not overflow:hidden: the alert badge overhangs the corner; text blocks clip themselves */
+  transition: transform var(--glide), width var(--glide), height var(--glide), border-color var(--fade), box-shadow var(--fade), opacity var(--fade), scale 0.2s ease; }
+.card:hover { scale: 1.015; }
+.card:active { scale: 0.995; }
+.card.has-subs { z-index: 3; }
+.card.s-working { border-color: var(--c-working); box-shadow: var(--shadow), 0 0 0 4px color-mix(in srgb, var(--c-working) 16%, transparent); }
+.card.s-waiting { border-color: var(--c-waiting); box-shadow: var(--shadow), 0 0 0 4px color-mix(in srgb, var(--c-waiting) 18%, transparent); }
+.card.s-limit { border-color: var(--c-limit); box-shadow: var(--shadow), 0 0 0 4px color-mix(in srgb, var(--c-limit) 16%, transparent); }
+.card.s-ended { border-color: var(--c-ended); opacity: 0.6; }
+.card .head { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 1.18em; }
+.card .model { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--c-idle); box-shadow: 0 0 0 1px var(--line); transition: background var(--fade); }
+.s-working > .head .dot, .s-working > .mini-head .dot, .dot.s-working { background: var(--c-working); }
+.s-waiting > .head .dot, .s-waiting > .mini-head .dot, .dot.s-waiting { background: var(--c-waiting); }
+.s-limit > .head .dot, .s-limit > .mini-head .dot, .dot.s-limit { background: var(--c-limit); }
+.s-ended > .head .dot, .s-ended > .mini-head .dot, .dot.s-ended { background: var(--c-ended); }
+.card .sub { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 0.95em; }
+.card .branch { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .tps { flex: none; font-variant-numeric: tabular-nums; }
+.use { display: flex; justify-content: space-between; gap: 8px; margin-top: 1px; color: var(--muted); font-size: 0.95em; font-variant-numeric: tabular-nums; }
+.bar { height: 3px; border-radius: 2px; background: var(--line); flex: none; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; border-radius: 2px; background: var(--muted); transition: width var(--glide), background var(--fade); }
+.bar i.warm { background: var(--c-waiting); }
+.bar i.hot { background: var(--c-limit); }
+.card hr { width: 100%; border: 0; border-top: 1px solid var(--line); margin: 4px 0 3px; flex: none; }
+/* newest text sits at the bottom; older lines scroll off the top */
+.feed, .mini-feed { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 3px; font: 1em/1.35 var(--font-mono); }
+.f { white-space: pre-wrap; word-break: break-word; animation: rise 0.25s ease-out; }
+.f.tool { color: var(--muted); }
+.f.dim { color: var(--muted); opacity: 0.7; }
+@keyframes rise { from { opacity: 0; transform: translateY(4px); } }
+.kill, .edit { position: absolute; top: 6px; padding: 0 6px; font-size: 11px; display: none; }
+.kill { right: 6px; }
+.edit { right: 32px; }
+.card:hover .edit { display: block; }
+.card.s-waiting .kill { right: 28px; } /* make room for the alert badge */
+.card.s-waiting .edit { right: 54px; }
+
+/* the name you gave a chat: the card's first line */
+.name { flex: none; height: 22px; line-height: 20px; font-weight: 650; font-size: 1.18em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 58px; }
+.name-input { flex: none; height: 22px; margin-right: 58px; background: var(--btn); color: var(--fg); border: 1px solid var(--accent); border-radius: 6px; padding: 0 6px; font: 650 1.18em var(--font-ui); outline: none; user-select: text; }
+
+/* "!" badge on the top-right corner when Claude needs an answer (permission, question, trust dialog).
+   A quarter of the circle overhangs the card: offset = -(size/4) minus the 2px card border. */
+.card { --badge: 24px; }
+.alert { position: absolute; top: calc(var(--badge) / -4 - 2px); right: calc(var(--badge) / -4 - 2px); width: var(--badge); height: var(--badge); border-radius: 50%; display: none; place-items: center; background: var(--c-waiting); border: 2px solid var(--board-bg); color: #1a1208; font: 800 14px/1 var(--font-ui); user-select: none; z-index: 4; }
+.mini .alert { font-size: 11px; }
+.mini.s-waiting > .mini-head { padding-right: 10px; } /* keep the status dot clear of the badge */
+.card.s-waiting > .alert, .mini.s-waiting > .alert { display: grid; animation: alert-in 0.3s cubic-bezier(0.3, 1.6, 0.4, 1), alert-pulse 2s ease-out 0.3s infinite; }
+@keyframes alert-in { from { transform: scale(0); } }
+@keyframes alert-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c-waiting) 55%, transparent); } 70%, 100% { box-shadow: 0 0 0 10px transparent; } }
+:root.no-motion .alert { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .alert { animation: none !important; } }
+.card:hover .kill { display: block; }
+
+/* sub-agents: smaller cards inside their parent (no branch / rate, just what each is doing) */
+.subs { flex: none; display: grid; grid-template-columns: repeat(var(--cols, 1), 1fr); gap: 6px; }
+.subs:empty { display: none; }
+.mini { --badge: 18px; position: relative; height: 74px; padding: 6px 8px; display: flex; flex-direction: column; gap: 3px; background: var(--mini); border: 2px solid var(--c-idle); border-radius: calc(var(--radius) * 0.7); /* no overflow:hidden: the badge overhangs; .mini-feed and .mini-title clip themselves */ transition: border-color var(--fade), opacity var(--fade), scale var(--glide); }
+.mini.s-working { border-color: var(--c-working); }
+.mini.s-waiting { border-color: var(--c-waiting); }
+.mini.s-limit { border-color: var(--c-limit); }
+.mini.s-ended { border-color: var(--c-ended); opacity: 0.55; }
+.mini-head { display: flex; align-items: center; gap: 6px; font-weight: 650; }
+.mini-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-feed { font-size: 0.92em; }
+.enter { opacity: 0; scale: 0.92; }
+/* filtering: folded / hidden cards fade out (and stop catching clicks); non-matching cards recede */
+.card.gone, .lines path.gone { opacity: 0; pointer-events: none; visibility: hidden; scale: 0.85; transition: opacity var(--fade), scale var(--glide), visibility 0s linear var(--fade), transform var(--glide), width var(--glide), height var(--glide), d var(--glide); }
+.card.dim { opacity: 0.2; }
+.lines path.dim { opacity: 0.12; }
+.hub.dim { opacity: 0.35; }
+.hub .caret { margin-right: 6px; opacity: 0.6; font-size: 10px; }
+.hub .count { margin-left: 8px; padding: 0 6px; border-radius: 999px; background: var(--btn-hover); color: var(--muted); font-size: 11px; font-weight: 600; }
+.hub .count:empty { display: none; }
+.ask { flex: none; display: flex; gap: 6px; margin-top: 5px; }
+.ask[hidden] { display: none; }
+.ask button { flex: 1; padding: 3px 0; border-radius: 6px; border: 1px solid var(--line); background: var(--btn); color: inherit; font: inherit; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+.ask button:hover { background: var(--btn-hover); }
+.ask-yes { border-color: var(--c-waiting) !important; color: var(--c-waiting); }
+.ask-yes:hover { background: var(--c-waiting) !important; color: #fff; }
+.hub-add { margin-left: 8px; width: 18px; height: 18px; line-height: 17px; text-align: center; border-radius: 50%; background: var(--btn-hover); color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer; display: inline-block; transition: background 0.15s, color 0.15s; }
+.hub-add:hover { background: var(--accent, #4c8dff); color: #fff; }
+.card.sel { outline: 2px solid var(--accent); outline-offset: 4px; }
+/* "⌘3": shown on every card while ⌘ is held, so the number to press is right there */
+.idx { position: absolute; left: 10px; top: -10px; z-index: 4; padding: 1px 8px; border-radius: 999px; background: var(--accent); color: #fff; font: 700 11px/16px var(--font-ui); display: none; pointer-events: none; }
+.show-keys .idx:not(:empty) { display: block; }
+.no-anim, .dragging .card, .dragging .hub, .dragging .lines path { transition: none !important; }
+
+/* ---- new chat: floating command bar ---- */
+.popover { position: absolute; z-index: 20; top: 64px; left: 50%; width: min(560px, calc(100% - 32px)); padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+  opacity: 0; visibility: hidden; transform: translate(-50%, -8px); transition: opacity 0.18s, transform 0.18s, visibility 0s linear 0.18s; }
+/* visibility must flip at once on open (no delay), or the input inside can't take keyboard focus yet; it only waits when closing */
+.popover.open { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition-delay: 0s; }
+.cmdrow { display: flex; align-items: center; gap: 10px; }
+.prompt { color: var(--accent); font: 13px var(--font-mono); }
+#cmd { flex: 1; background: transparent; border: 0; color: var(--fg); font: 13px var(--font-mono); padding: 6px 0; outline: none; }
+.cmdfoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); min-height: 34px; }
+#cmd-error { color: var(--c-limit); font-size: 12px; }
+
+/* ---- add-existing picker ---- */
+.popover.wide { width: min(680px, calc(100% - 32px)); }
+#search { flex: 1; background: transparent; border: 0; color: var(--fg); font: 13px var(--font-ui); padding: 6px 0; outline: none; }
+#results { margin-top: 8px; max-height: min(46vh, 360px); overflow-y: auto; display: grid; gap: 2px; }
+.result { padding: 7px 10px; border-radius: 8px; cursor: pointer; display: grid; gap: 1px; }
+.result.on, .result:hover { background: var(--btn-hover); }
+.result b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.results-msg { padding: 14px 10px; color: var(--muted); }
+#picker-note { color: var(--muted); font-size: 12px; }
+#picker-note.err { color: var(--c-limit); }
+
+/* ---- settings drawer ---- */
+.drawer { position: absolute; z-index: 15; top: 52px; right: 0; bottom: 0; width: 300px; overflow-y: auto; padding: 4px 16px 20px; background: var(--panel); border-left: 1px solid var(--line); box-shadow: var(--shadow);
+  transform: translateX(100%); visibility: hidden; transition: transform 0.28s cubic-bezier(0.3, 0.7, 0.2, 1), visibility 0s linear 0.28s; }
+.drawer.open { transform: none; visibility: visible; transition-delay: 0s; }
+.drawer header { display: flex; align-items: center; justify-content: space-between; height: 48px; }
+.drawer h2 { font-size: 14px; margin: 0; }
+.drawer h3 { font-size: 11px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 18px 0 6px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; }
+.row-label { flex: none; }
+.row-control { display: flex; align-items: center; gap: 8px; }
+.row-value { width: 44px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100px; accent-color: var(--accent); }
+button.swatch { width: 34px; height: 22px; padding: 0; border-radius: 7px; border: 1px solid var(--line); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); }
+button.swatch:hover { filter: brightness(1.12); }
+
+/* in-app colour picker (the native one ignores the theme) */
+.cp { position: fixed; z-index: 50; width: 232px; padding: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+  opacity: 0; visibility: hidden; transform: translateX(6px); transition: opacity 0.15s, transform 0.15s, visibility 0.15s; }
+.cp.open { opacity: 1; visibility: visible; transform: none; }
+.cp-sv { position: relative; height: 128px; border-radius: 8px; cursor: crosshair; touch-action: none; }
+.cp-hue { position: relative; height: 12px; margin-top: 12px; border-radius: 6px; cursor: pointer; touch-action: none; background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+.cp-knob { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.4); pointer-events: none; }
+.cp-hue .cp-knob { top: 50%; }
+.cp-hexrow { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.cp-preview { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line); flex: none; }
+.cp-hex { flex: 1; min-width: 0; background: var(--btn); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; font: 12px var(--font-mono); text-transform: lowercase; }
+.cp-presets { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 12px; }
+button.cp-preset { height: 22px; padding: 0; border-radius: 6px; border: 1px solid var(--line); }
+button.cp-preset.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+:root.no-motion .cp { transition: none; }
+.segmented { display: flex; background: var(--btn); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
+.segmented button { border: 0; background: transparent; padding: 3px 10px; border-radius: 6px; }
+.segmented button.on { background: var(--accent); color: #fff; }
+input.switch { appearance: none; width: 34px; height: 20px; border-radius: 999px; background: var(--btn-hover); border: 1px solid var(--line); position: relative; cursor: pointer; transition: background 0.2s; flex: none; }
+input.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform 0.2s; }
+input.switch:checked { background: var(--accent); }
+input.switch:checked::after { transform: translateX(14px); }
+.reset { margin-top: 22px; width: 100%; }
+
+kbd { font: 11px var(--font-mono); color: var(--muted); background: var(--btn); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
+
+/* ---- banner (claude missing etc.) ---- */
+#banner { display: flex; align-items: center; gap: 12px; padding: 8px 20px; background: color-mix(in srgb, var(--c-limit) 14%, var(--panel)); border-bottom: 1px solid var(--c-limit); font-size: 12px; }
+#banner-text { flex: 1; }
+
+/* ---- chat view: one pane, or two side by side ---- */
+#bar { height: 40px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 14px 0 10px; border-bottom: 1px solid var(--line); }
+#chat-name { font-weight: 650; }
+#chat-path { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#wrap { position: relative; flex: 1; min-height: 0; display: flex; gap: 1px; background: var(--line); }
+.pane { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--term-bg); }
+.pane-head { display: none; align-items: center; gap: 8px; height: 28px; flex: none; padding: 0 6px 0 12px; background: var(--bg); border-bottom: 1px solid var(--line); font-size: 12px; }
+#wrap.split .pane-head { display: flex; }
+.pane-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.pane-close { padding: 0 6px; font-size: 11px; background: transparent; border-color: transparent; color: var(--muted); }
+#wrap.split .pane.active .pane-head { box-shadow: inset 0 -2px 0 var(--accent); }
+.pane-body { flex: 1; min-height: 0; padding: 8px; position: relative; }
+.pane-term { width: 100%; height: 100%; } /* no padding here: fit measures this box */
+.pane-body.drop::after { content: 'Drop to type the path'; position: absolute; inset: 6px; display: grid; place-items: center; border: 2px dashed var(--accent); border-radius: 10px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: #fff; font-weight: 600; pointer-events: none; }
+
+/* find in scrollback */
+.findbar { position: absolute; z-index: 30; top: 48px; right: 16px; display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow);
+  opacity: 0; visibility: hidden; transform: translateY(-6px); transition: opacity 0.15s, transform 0.15s, visibility 0s linear 0.15s; }
+.findbar.open { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+#find-input { width: 210px; height: 26px; padding: 0 8px; background: var(--btn); color: var(--fg); border: 1px solid var(--line); border-radius: 7px; font: 12px var(--font-ui); outline: none; }
+#find-input:focus { border-color: var(--accent); }
+#find-count { min-width: 56px; text-align: right; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.findbar button { height: 26px; }
+.findbar button.icon { width: 26px; height: 26px; }
+
+/* split menu: pick the chat to show beside this one */
+.popover.menu { left: auto; right: 16px; top: 48px; width: 340px; padding: 6px; transform: translateY(-8px); }
+.popover.menu.open { transform: none; }
+.menu-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; cursor: pointer; }
+.menu-item:hover, .menu-item.on { background: var(--btn-hover); }
+.menu-item .menu-name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-item small { color: var(--muted); }
+.menu-msg { padding: 12px 10px; color: var(--muted); }
+
+select { background: var(--btn); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 3px 6px; font: inherit; max-width: 170px; }

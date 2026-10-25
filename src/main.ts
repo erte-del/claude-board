@@ -1,0 +1,509 @@
+import { app, BrowserWindow, dialog, ipcMain, Notification, screen, session, shell } from 'electron'
+import { execFile } from 'node:child_process'
+import { accessSync, constants, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
+import { pathToFileURL } from 'node:url'
+import { rename, writeFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import os from 'node:os'
+import path from 'node:path'
+import * as pty from 'node-pty'
+import { Terminal } from '@xterm/headless'
+import { encodeCwd, scanSessions, type SessionInfo } from './scanner.mts'
+import { resolveDir } from './paths.mts'
+import { sanitizeRegistry, type RegEntry } from './registry.mts'
+import { SubagentWatcher, Tailer } from './tailer.mts'
+import { modelFromScreen, permissionPrompt, waitingForUser } from './screen.mts'
+import { createLogger } from './logger.mts'
+import { badgeText, planLimitReset, planNotifications } from './attention.mts'
+import { CONTEXT_WINDOW } from './pricing.mts'
+import { restoreBounds } from './windowstate.mts'
+import { groupFontFiles } from './fontfiles.mts'
+import { commonBinDirs, findExecutable, parseEnv0 } from './shellenv.mts'
+import { emptyLayout, type ChatInfo, type Layout, type Status, type SubInfo } from './types'
+
+const MAX_BUFFER = 200_000
+
+// The packaged app is named "Claude Board", which would move its data folder; keep it where `npm run dev` already uses.
+// (An explicit --user-data-dir, e.g. for testing, wins.)
+if (app.isPackaged && !app.commandLine.hasSwitch('user-data-dir')) app.setPath('userData', path.join(app.getPath('appData'), 'claude-board'))
+
+type Chat = {
+  id: string; pty: pty.IPty; cwd: string; sessionId: string; status: Status; buffer: string
+  lastData: number // last pty output that was not an echo of our own input
+  lastInput: number
+  tailer: Tailer
+  subs: SubagentWatcher
+  screen: Terminal // headless mirror of the pty, used to read what is on screen
+  gitBranch: string | null
+  prev?: Status // status at the previous tick, to spot transitions
+  killed: boolean // ended because the user killed it
+  endNote: string[] | null // what the card shows once the process is gone
+  screenModel: string | null // model named on the start-up banner, used until the transcript has one
+}
+
+const chats = new Map<string, Chat>()
+let win: BrowserWindow | null = null
+const attached = new Set<string>() // chats currently shown in the chat view (one pane, or two side by side); empty = the board is showing
+let claudeBin: string | null = null
+let lastSig = ''
+let confirmedQuit = false
+let notifyOn = true // from settings.json (renderer's "Notify me" toggle)
+let lastBadge = ''
+let wasLimited = false
+let limitResetAt: number | null = null // when the current limit lifts, if its notice said (applies to every limited chat)
+let titles: Record<string, string> = {} // names the user gave cards (kept in the layout file), for notification text
+let stopping = false
+
+// Chats the app started, remembered across launches. On launch each becomes a "dormant" card (no process) that a click resumes.
+type Dormant = { id: string; cwd: string; sessionId: string; tailer: Tailer; subs: SubagentWatcher }
+const dormant = new Map<string, Dormant>() // by sessionId
+let registry: RegEntry[] = []
+const transcriptFile = (cwd: string, sessionId: string) => path.join(os.homedir(), '.claude', 'projects', encodeCwd(cwd), `${sessionId}.jsonl`)
+
+const liveChats = () => [...chats.values()].filter((c) => c.status !== 'ended')
+// The window can already be gone while a pty is still exiting during shutdown.
+const send = (channel: string, ...args: unknown[]) => { if (win && !win.isDestroyed()) win.webContents.send(channel, ...args) }
+
+// An app opened from the Dock or Finder gets launchd's bare environment, not the one Terminal.app builds from ~/.zshrc and
+// friends. So ask the user's own shell (interactive + login, so it reads everything) for its environment, once, and use it both
+// to find `claude` and as the environment of every chat: Claude's hooks, node, npx and MCP servers need the same PATH as in a terminal.
+const ENV_MARKER = '__CLAUDE_BOARD_ENV__'
+let shellEnv: Record<string, string> | null = null
+function captureShellEnv(): Promise<void> {
+  const shell = process.env.SHELL || '/bin/zsh'
+  return new Promise((resolve) => {
+    execFile(shell, ['-ilc', `printf '%s' ${ENV_MARKER}; env -0`], { encoding: 'utf8', timeout: 10_000, maxBuffer: 8 * 1024 * 1024, env: { ...process.env, TERM: 'dumb' } }, (_err, stdout) => {
+      const env = parseEnv0(stdout ?? '', ENV_MARKER)
+      if (env?.PATH) shellEnv = env // a shell that hangs or dies leaves us with the process environment plus the usual folders
+      resolve()
+    })
+  })
+}
+let envReady = captureShellEnv()
+
+const isExecutable = (p: string) => { try { accessSync(p, constants.X_OK); return statSync(p).isFile() } catch { return false } }
+function resolveClaude(): string {
+  if (claudeBin) return claudeBin
+  const found = findExecutable('claude', shellEnv?.PATH ?? process.env.PATH ?? '', commonBinDirs(os.homedir()), isExecutable)
+  if (!found) throw new Error('`claude` not found on your PATH or in the usual install folders (~/.local/bin, /opt/homebrew/bin, /usr/local/bin)')
+  return (claudeBin = found)
+}
+
+// The last `n` rows of what is on screen. Blank rows below the content are ignored: a chat that prints near the top of a tall,
+// mostly empty terminal (an early crash message) would otherwise show nothing.
+function screenBottom(c: Chat, n = 14): string[] {
+  const b = c.screen.buffer.active
+  const rows: string[] = []
+  for (let y = b.baseY; y < b.baseY + c.screen.rows; y++) rows.push(b.getLine(y)?.translateToString(true) ?? '')
+  while (rows.length && !rows[rows.length - 1].trim()) rows.pop()
+  return rows.slice(-n)
+}
+
+// The banner sits at the top of the screen; once it scrolls away or the chat ends, the value found earlier is kept.
+function bannerModel(c: Chat): string | null {
+  if (!c.screenModel && c.status !== 'ended') {
+    const b = c.screen.buffer.active
+    const rows: string[] = []
+    for (let y = b.baseY; y < b.baseY + Math.min(12, c.screen.rows); y++) rows.push(b.getLine(y)?.translateToString(true) ?? '')
+    c.screenModel = modelFromScreen(rows)
+  }
+  return c.screenModel
+}
+
+// With answer buttons on the card, the numbered options are redundant: show what is being asked (the command, the file) instead.
+const dialogText = (c: Chat, forButtons = false) =>
+  screenBottom(c, forButtons ? 30 : 14).map((l) => l.trim()).filter((l) => l && !/^[─━│╭╮╰╯╌\s]+$/.test(l) && !(forButtons && /^[❯>]?\s*\d+\.\s/.test(l))).slice(-8)
+
+const summary = (c: Chat): ChatInfo => {
+  const t = c.tailer.state
+  // A blocking dialog isn't in the transcript yet, so show what is on screen: that is what the user is being asked.
+  const prompt = c.status === 'waiting' ? permissionPrompt(screenBottom(c, 30))?.question ?? null : null
+  const feed = c.status === 'waiting' ? dialogText(c, prompt !== null) : t.feed
+  return { id: c.id, cwd: c.cwd, sessionId: c.sessionId, status: c.status, model: t.model ?? bannerModel(c), branch: t.branch ?? c.gitBranch, tps: t.tps, feed: c.endNote ?? feed, subagents: subagentsOf(c), ...usageOf(t, c.subs), limitResetAt: c.status === 'limit' ? limitResetAt : null, prompt, resumable: c.status === 'ended' && c.tailer.exists }
+}
+
+// A running sub-agent is working by definition; it is only "waiting" when the parent is blocked on a dialog and this one has a pending tool.
+function subagentsOf(c: Chat): SubInfo[] {
+  if (c.status === 'ended') return []
+  return c.subs.running().map((a) => ({
+    id: a.id,
+    title: a.title,
+    feed: a.tailer.state.feed.slice(-3),
+    status: a.done ? 'ended' : c.status === 'limit' ? 'limit' : c.status === 'waiting' && a.tailer.state.pending.size > 0 ? 'waiting' : 'working',
+  }))
+}
+// Context fill and estimated cost. Cost is null unless every message (sub-agents included) used a model with a verified price.
+function usageOf(t: Tailer['state'], subs: SubagentWatcher) {
+  const main = t.costUSD(), sub = subs.costUSD()
+  return {
+    contextTokens: t.contextTokens(),
+    contextWindow: CONTEXT_WINDOW[t.lastModel() ?? ''] ?? null,
+    costUSD: main !== null && sub !== null ? main + sub : null,
+  }
+}
+
+const dormantInfo = (d: Dormant): ChatInfo => {
+  const t = d.tailer.state
+  return { id: d.id, cwd: d.cwd, sessionId: d.sessionId, status: 'ended', model: t.model, branch: t.branch, tps: t.tps, feed: t.feed.slice(-4), subagents: [], ...usageOf(t, d.subs), limitResetAt: null, prompt: null, resumable: true }
+}
+const allInfos = () => [...chats.values()].map(summary).concat([...dormant.values()].map(dormantInfo))
+const notifyChanged = () => {
+  const list = allInfos()
+  lastSig = JSON.stringify(list)
+  send('chats:changed', list)
+}
+
+function spawnChat(folder: string, args: string[], sessionId: string, resumed = false): string {
+  const dir = resolveDir(folder)
+  if (!dir.ok) throw new Error(dir.error)
+  const cwd = dir.path // the real path: it is what the chat will report, and so where its transcript is filed
+  const id = randomUUID()
+  const env = { ...process.env, ...shellEnv, TERM: 'xterm-256color', COLORTERM: 'truecolor' } as Record<string, string>
+  // Don't inherit another Claude session's identity if the app was launched from inside one.
+  for (const k of ['CLAUDECODE', 'CLAUDE_PID', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_EXECPATH', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_MESSAGING_SOCKET', 'CLAUDE_CODE_MESSAGING_TOKEN']) delete env[k]
+  const claudePath = resolveClaude()
+  const p = pty.spawn(claudePath, args, { name: 'xterm-256color', cols: 80, rows: 24, cwd, env })
+  log(`start pid=${p.pid} cwd=${cwd} ${args.join(' ')}`)
+  const file = transcriptFile(cwd, sessionId)
+  const chat: Chat = { id, pty: p, cwd, sessionId, status: 'working', buffer: '', lastData: Date.now(), lastInput: 0, tailer: new Tailer(file), subs: new SubagentWatcher(path.join(path.dirname(file), sessionId, 'subagents')), screen: new Terminal({ cols: 80, rows: 24, allowProposedApi: true }), gitBranch: null, killed: false, endNote: null, screenModel: null, prev: undefined }
+  if (resumed) { chat.tailer.catchUp(); chat.subs.catchUp() } // history is shown; its stale limit / pending-tool state is not
+  // Branch for the card before the first transcript entry exists.
+  execFile('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], (err, out) => { if (!err) chat.gitBranch = out.trim() })
+  p.onData((d) => {
+    // shortcut: slicing can cut an escape sequence in half at the buffer head; harmless in practice, fix if replay glitches
+    chat.buffer = (chat.buffer + d).slice(-MAX_BUFFER)
+    chat.screen.write(d)
+    // Output right after a keystroke/resize is the terminal echoing or redrawing, not Claude working.
+    if (Date.now() - chat.lastInput > 300) chat.lastData = Date.now()
+    if (attached.has(id)) send('pty:data', id, d)
+  })
+  p.onExit(async ({ exitCode, signal }) => {
+    await new Promise<void>((resolve) => chat.screen.write('', resolve)) // let the screen mirror parse the last output (a crash message) before it is read
+    chat.tailer.poll()
+    const failed = (exitCode !== 0 || !!signal) && !chat.killed // a signal death reports exit code 0 plus a signal
+    const note = chat.killed ? '[chat killed]' : `[process exited${exitCode ? ` with code ${exitCode}` : ''}${signal ? `, signal ${signal}` : ''}]`
+    // A crash/early exit: show what claude printed (that's the error). A normal end: show the last of the conversation.
+    chat.endNote = [...(failed ? dialogText(chat).slice(-5) : chat.tailer.state.feed.slice(-4)), note]
+    const line = `\r\n\x1b[2m${note}\x1b[0m\r\n` // so the chat view says so too
+    chat.buffer += line
+    if (attached.has(id)) send('pty:data', id, line)
+    log(`exit pid=${p.pid} cwd=${cwd} code=${exitCode} signal=${signal ?? 'none'}${chat.killed ? ' (killed by user)' : ''}${failed ? `\n  screen: ${dialogText(chat).join(' | ')}` : ''}`)
+    chat.status = 'ended'
+    chat.screen.dispose()
+    notifyChanged()
+  })
+  chats.set(id, chat)
+  notifyChanged()
+  return id
+}
+
+// Choosing the session id up front means the card and its transcript match exactly; no guessing from files appearing.
+const newChat = (cwd: string): { ok: true; id: string } | { ok: false; error: string } => {
+  try {
+    const sessionId = randomUUID()
+    const id = spawnChat(cwd, ['--session-id', sessionId], sessionId)
+    registry.push({ sessionId, cwd: chats.get(id)!.cwd }) // the resolved folder: that is where the transcript is filed
+    void writeJson('chats.json', registry)
+    return { ok: true, id }
+  } catch (e) {
+    log(`newChat failed in ${cwd}: ${e instanceof Error ? e.stack : e}`)
+    return { ok: false, error: e instanceof Error ? e.message : String(e) } // claude missing, bad folder, spawn failure
+  }
+}
+
+// `claude --resume <id>` appends to the same transcript under the same id, so the card keeps its identity and position.
+function resumeChat(sessionId: string): { ok: true; id: string } | { ok: false; error: string } {
+  const old = [...chats.values()].find((c) => c.sessionId === sessionId)
+  if (old && old.status !== 'ended') return { ok: true, id: old.id } // already running
+  const cwd = dormant.get(sessionId)?.cwd ?? old?.cwd
+  if (!cwd) return { ok: false, error: 'That chat is no longer on the board.' }
+  if (old) chats.delete(old.id) // so two cards never share a session while the new process starts
+  try {
+    const id = spawnChat(cwd, ['--resume', sessionId], sessionId, true)
+    dormant.delete(sessionId)
+    return { ok: true, id }
+  } catch (e) {
+    log(`resume ${sessionId} failed: ${e instanceof Error ? e.stack : e}`)
+    if (old) chats.set(old.id, old) // keep the card if resuming failed (folder gone, claude missing)
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+function forget(sessionId: string) {
+  registry = registry.filter((r) => r.sessionId !== sessionId)
+  void writeJson('chats.json', registry)
+}
+
+// node-pty makes the child a session leader (pgid == pid), so signalling the group also reaches hooks and MCP servers it started.
+function killTree(c: Chat, sig: NodeJS.Signals) {
+  try { process.kill(-c.pty.pid, sig) } catch { try { c.pty.kill(sig) } catch { /* already gone */ } }
+}
+function stopChat(c: Chat) {
+  return new Promise<void>((resolve) => {
+    c.pty.onExit(() => resolve())
+    killTree(c, 'SIGHUP')
+    setTimeout(() => { killTree(c, 'SIGKILL'); resolve() }, 2000) // something ignored the hangup
+  })
+}
+
+function tick() {
+  const live = [...chats.values()].filter((c) => c.status !== 'ended')
+  for (const c of live) { c.tailer.poll(); c.subs.poll() }
+  // A limit holds until a normal reply clears it, or until the time its notice gave has passed (nobody has to reply for it to lift).
+  const limitActive = (c: Chat) => !!c.tailer.state.limit && !(c.tailer.state.limitResetAt && Date.now() >= c.tailer.state.limitResetAt)
+  const limited = live.some(limitActive)
+  const resets = live.filter(limitActive).map((c) => c.tailer.state.limitResetAt).filter((t): t is number => t !== null)
+  limitResetAt = limited && resets.length ? Math.min(...resets) : null
+  for (const c of live) {
+    c.status = limited ? 'limit'
+      : Date.now() - c.lastData < 2000 ? 'working'
+      : waitingForUser(screenBottom(c)) || c.tailer.state.pending.size > 0 ? 'waiting'
+      : 'idle'
+  }
+  attend(live, limited)
+  if (JSON.stringify(allInfos()) !== lastSig) notifyChanged()
+}
+
+// Tell the user when a chat needs them while they're elsewhere: a notification (click opens that chat) and a Dock badge.
+function attend(live: Chat[], limited: boolean) {
+  if (stopping) return // shutting down: no notifications, no badge changes
+  const watching = (id: string) => !!win && win.isFocused() && (attached.size === 0 || attached.has(id)) // board visible, or that chat is on screen
+  const plans = planNotifications(
+    live.map((c) => ({ id: c.id, cwd: c.cwd, name: titles[c.sessionId], status: c.status, prev: c.prev, detail: c.status === 'limit' ? (c.tailer.state.limit ?? '') : dialogText(c).slice(0, 3).join(' · ') })),
+    { enabled: notifyOn && Notification.isSupported(), watching },
+  )
+  for (const p of plans) {
+    const n = new Notification({ title: p.title, body: p.body })
+    n.on('click', () => { win?.show(); win?.focus(); send('open-chat', p.chatId) })
+    n.show()
+  }
+  const lifted = planLimitReset(wasLimited, limited, !!win && win.isFocused() && attached.size === 0, notifyOn && Notification.isSupported(), live.length > 0)
+  if (lifted) new Notification(lifted).show()
+  wasLimited = limited
+  for (const c of live) c.prev = c.status
+  const badge = notifyOn ? badgeText(live) : ''
+  if (badge !== lastBadge) { lastBadge = badge; app.dock?.setBadge(badge) }
+}
+setInterval(tick, 500)
+
+const userFile = (name: string) => path.join(app.getPath('userData'), name)
+// Problems that would otherwise vanish: chat crashes, spawn failures, and errors in the app itself. One file, one rolled-over copy.
+const log = (msg: string) => createLogger(userFile('claude-board.log'))(msg)
+process.on('uncaughtException', (e) => log(`uncaughtException: ${e.stack ?? e}`))
+process.on('unhandledRejection', (e) => log(`unhandledRejection: ${e instanceof Error ? e.stack : e}`))
+app.on('render-process-gone', (_e, _wc, d) => log(`renderer gone: ${d.reason} (exit ${d.exitCode})`))
+app.on('child-process-gone', (_e, d) => log(`${d.type} process gone: ${d.reason} (exit ${d.exitCode})`))
+const readJson = (name: string): unknown => { try { return JSON.parse(readFileSync(userFile(name), 'utf8')) } catch { return null } }
+async function writeJson(name: string, data: unknown) {
+  const tmp = userFile(name) + '.tmp' // write-then-rename so a crash can't leave half a file
+  await writeFile(tmp, JSON.stringify(data))
+  await rename(tmp, userFile(name))
+}
+
+ipcMain.handle('pickFolder', async () => {
+  const r = await dialog.showOpenDialog(win!, { properties: ['openDirectory', 'createDirectory'] })
+  return r.canceled ? null : r.filePaths[0]
+})
+ipcMain.handle('resolveDir', (_e, input: string) => resolveDir(input))
+ipcMain.handle('claudeStatus', async () => {
+  await envReady
+  for (let attempt = 0; ; attempt++) {
+    try { return { ok: true, path: resolveClaude() } } catch (e) {
+      if (attempt > 0) return { ok: false, error: (e as Error).message }
+      envReady = captureShellEnv() // not found: the user may have just fixed their shell config, so ask the shell again before giving up
+      await envReady
+    }
+  }
+})
+ipcMain.handle('newChat', async (_e, cwd: string) => { await envReady; return newChat(cwd) })
+ipcMain.handle('openChat', (_e, id: string) => {
+  const c = chats.get(id)
+  if (!c) return null
+  attached.add(id)
+  return c.buffer
+})
+ipcMain.handle('listChats', () => allInfos())
+ipcMain.handle('resumeChat', async (_e, sessionId: string) => { await envReady; return resumeChat(sessionId) })
+
+// "Add existing chat": anything in Claude Code's history that isn't already on the board (and has at least one message).
+ipcMain.handle('listHistory', async (): Promise<SessionInfo[]> => {
+  const onBoard = new Set([...chats.values()].map((c) => c.sessionId).concat([...dormant.keys()]))
+  return (await scanSessions()).filter((s) => s.messageCount > 0 && !onBoard.has(s.sessionId))
+})
+// Puts it on the board as a gray resumable card (not resumed yet: the user may still have it open elsewhere).
+ipcMain.handle('addChat', async (_e, sessionId: string): Promise<{ ok: true } | { ok: false; error: string }> => {
+  if (dormant.has(sessionId) || [...chats.values()].some((c) => c.sessionId === sessionId)) return { ok: true }
+  const s = (await scanSessions()).find((x) => x.sessionId === sessionId)
+  if (!s) return { ok: false, error: 'That chat was not found in your Claude Code history.' }
+  const d = makeDormant(s.cwd, s.sessionId)
+  if (!d) return { ok: false, error: "Couldn't read that chat's transcript." }
+  dormant.set(s.sessionId, d)
+  registry.push({ sessionId: s.sessionId, cwd: s.cwd })
+  void writeJson('chats.json', registry)
+  notifyChanged()
+  return { ok: true }
+})
+ipcMain.handle('loadLayout', (): Layout => ({ ...emptyLayout(), ...(readJson('board-layout.json') as object | null) }))
+ipcMain.handle('saveLayout', (_e, layout: Layout) => {
+  titles = layout.titles ?? {}
+  return writeJson('board-layout.json', layout)
+})
+// Font files the user has installed (Chromium can't use ~/Library/Fonts by name, but it can load the files).
+ipcMain.handle('listFonts', () => {
+  const seen = new Set<string>()
+  const out: { name: string; regular: string; bold?: string }[] = []
+  for (const dir of [path.join(os.homedir(), 'Library', 'Fonts'), '/Library/Fonts']) {
+    let files: string[]
+    try { files = readdirSync(dir) } catch { continue }
+    for (const g of groupFontFiles(files)) {
+      if (seen.has(g.name)) continue
+      seen.add(g.name)
+      out.push({ name: g.name, regular: pathToFileURL(path.join(dir, g.regular)).href, bold: g.bold ? pathToFileURL(path.join(dir, g.bold)).href : undefined })
+    }
+  }
+  return out
+})
+ipcMain.handle('loadSettings', () => readJson('settings.json'))
+ipcMain.handle('saveSettings', (_e, settings: unknown) => {
+  notifyOn = (settings as { notifications?: boolean } | null)?.notifications !== false
+  return writeJson('settings.json', settings)
+})
+ipcMain.handle('killChat', (_e, id: string) => {
+  const dormantEntry = [...dormant.values()].find((d) => d.id === id)
+  if (dormantEntry) { // a restored card: removing it means forgetting the chat (its transcript stays in Claude's history)
+    dormant.delete(dormantEntry.sessionId)
+    forget(dormantEntry.sessionId)
+    notifyChanged()
+    return
+  }
+  const c = chats.get(id)
+  if (!c) return
+  if (c.status === 'ended') { // already dead: this is "remove card"
+    chats.delete(id)
+    forget(c.sessionId)
+    attached.delete(id)
+    notifyChanged()
+  } else {
+    c.killed = true
+    killTree(c, 'SIGHUP')
+  }
+})
+ipcMain.on('pty:write', (_e, id: string, data: string) => {
+  const c = chats.get(id)
+  if (c && c.status !== 'ended') { c.lastInput = Date.now(); c.pty.write(data) }
+})
+// Yes / No from a card. The renderer names the question it was showing; the keys come from the screen as it is now, so a newer or
+// different dialog is never answered by mistake, and no arbitrary keystrokes cross this boundary.
+ipcMain.handle('answerPrompt', (_e, id: string, question: string, answer: 'yes' | 'no'): { ok: boolean; error?: string } => {
+  const c = chats.get(id)
+  const p = c && c.status !== 'ended' ? permissionPrompt(screenBottom(c, 30)) : null
+  if (!c || !p || p.question !== question) return { ok: false, error: 'That question is no longer showing.' }
+  log(`answer ${answer} pid=${c.pty.pid} "${p.question}"`)
+  c.lastInput = Date.now()
+  c.pty.write(answer === 'yes' ? p.yes : p.no)
+  return { ok: true }
+})
+ipcMain.on('pty:resize', (_e, id: string, cols: number, rows: number) => {
+  const c = chats.get(id)
+  if (c && c.status !== 'ended' && cols > 0 && rows > 0) { c.lastInput = Date.now(); c.pty.resize(cols, rows); c.screen.resize(cols, rows) }
+})
+ipcMain.on('detach', (_e, id?: string) => { if (id) attached.delete(id); else attached.clear() }) // one pane closed, or all of them
+
+// Restore last run's chats as dormant cards. A chat that never got a message has no transcript, so there is nothing to resume.
+// A restored card has no process; it reads the transcript (and its sub-agents') once for what it shows.
+function makeDormant(cwd: string, sessionId: string): Dormant | null {
+  const file = transcriptFile(cwd, sessionId)
+  const tailer = new Tailer(file)
+  tailer.catchUp()
+  if (!tailer.exists) return null
+  const subs = new SubagentWatcher(path.join(path.dirname(file), sessionId, 'subagents'))
+  subs.catchUp()
+  return { id: `dormant-${sessionId}`, cwd, sessionId, tailer, subs }
+}
+
+const realpathOr = (p: string) => { try { return realpathSync(p) } catch { return p } }
+
+function loadRegistry() {
+  const kept: RegEntry[] = []
+  for (const saved of sanitizeRegistry(readJson('chats.json'))) {
+    const r = { ...saved, cwd: realpathOr(saved.cwd) } // entries saved before folders were resolved may name a symlink
+    const d = makeDormant(r.cwd, r.sessionId)
+    if (!d) continue
+    kept.push(r)
+    dormant.set(r.sessionId, d)
+  }
+  registry = kept
+  void writeJson('chats.json', registry)
+}
+
+function confirmQuit(): boolean {
+  const n = liveChats().length
+  if (!n) return true
+  const r = dialog.showMessageBoxSync(win!, {
+    type: 'warning',
+    buttons: ['Quit', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    message: n === 1 ? '1 chat is still running.' : `${n} chats are still running.`,
+    detail: 'Quitting stops them. Their transcripts stay in Claude Code history, but anything in flight is lost.',
+  })
+  return r === 0
+}
+
+app.whenReady().then(() => {
+  notifyOn = (readJson('settings.json') as { notifications?: boolean } | null)?.notifications !== false
+  titles = (readJson('board-layout.json') as { titles?: Record<string, string> } | null)?.titles ?? {}
+  loadRegistry()
+  // The app itself makes no network requests; this makes sure nothing in the page can either.
+  session.defaultSession.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] }, (_d, cb) => cb({ cancel: true }))
+
+  // Reopen where the window was left (size, position, maximized), unless that spot is no longer on a connected display.
+  const b = restoreBounds(readJson('window.json'), screen.getAllDisplays().map((d) => d.workArea), { width: 1200, height: 800 })
+  win = new BrowserWindow({
+    x: b.x,
+    y: b.y,
+    width: b.width,
+    height: b.height,
+    backgroundColor: '#1e1e1e',
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
+  })
+  if (b.maximized) win.maximize()
+  let boundsTimer: NodeJS.Timeout | undefined
+  const rememberBounds = () => {
+    clearTimeout(boundsTimer)
+    boundsTimer = setTimeout(() => {
+      if (!win || win.isDestroyed()) return
+      void writeJson('window.json', { ...win.getNormalBounds(), maximized: win.isMaximized() })
+    }, 400)
+  }
+  win.on('resize', rememberBounds)
+  win.on('move', rememberBounds)
+  win.loadFile(path.join(__dirname, 'index.html'))
+  // Links clicked in the terminal open in the default browser, never inside the app.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  // Never navigate away from the app: a file dropped on the window would otherwise open as a page.
+  win.webContents.on('will-navigate', (e, url) => { if (url !== win!.webContents.getURL()) e.preventDefault() })
+  win.on('close', (e) => {
+    if (confirmedQuit) return
+    if (confirmQuit()) confirmedQuit = true
+    else e.preventDefault()
+  })
+})
+
+app.on('before-quit', (e) => {
+  if (confirmedQuit) return
+  if (confirmQuit()) confirmedQuit = true
+  else e.preventDefault()
+})
+app.on('window-all-closed', () => app.quit())
+// Stop every chat's process group and wait for it, so nothing is orphaned and no exit callback fires into a dead runtime.
+app.on('will-quit', (e) => {
+  const live = liveChats()
+  if (!live.length || stopping) return
+  e.preventDefault()
+  stopping = true
+  Promise.all(live.map(stopChat)).then(() => app.quit())
+})
