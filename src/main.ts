@@ -14,7 +14,7 @@ import { planRestart } from './restart.mts'
 import { openingArgs, resolveDir } from './paths.mts'
 import { sanitizeRegistry, type RegEntry } from './registry.mts'
 import { SubagentWatcher, Tailer } from './tailer.mts'
-import { modelFromScreen, permissionMode, permissionPrompt, waitingForUser, type PermMode } from './screen.mts'
+import { modelFromScreen, dialogKind, permissionMode, permissionPrompt, waitingForUser, type PermMode, type WaitKind } from './screen.mts'
 import { createLogger } from './logger.mts'
 import { badgeText, inQuietHours, planFinished, planLimitReset, planNotifications, wantAwake } from './attention.mts'
 import { CONTEXT_WINDOW } from './pricing.mts'
@@ -41,6 +41,7 @@ type Chat = {
   prev?: Status // status at the previous tick, to spot transitions
   killed: boolean // ended because the user killed it
   seenReply: string | null // last reply already announced (or present before this process started), so "finished" fires once per new reply
+  waitKind: WaitKind | null // what the dialog blocking this chat is (set each tick while waiting)
   crashed: boolean // ended with a non-zero exit or a signal, not killed by the user
   endNote: string[] | null // what the card shows once the process is gone
   permMode: PermMode | null // last permission mode seen on the status line (kept while a dialog hides it)
@@ -133,7 +134,7 @@ const summary = (c: Chat): ChatInfo => {
   // A blocking dialog isn't in the transcript yet, so show what is on screen: that is what the user is being asked.
   const prompt = c.status === 'waiting' ? permissionPrompt(screenBottom(c, 30))?.question ?? null : null
   const feed = c.status === 'waiting' ? dialogText(c, prompt !== null) : t.feed
-  return { id: c.id, cwd: c.cwd, sessionId: c.sessionId, status: c.status, model: t.model ?? bannerModel(c), branch: t.branch ?? c.gitBranch, tps: t.tps, feed: c.endNote ?? feed, subagents: subagentsOf(c), ...usageOf(t, c.subs), limitResetAt: c.status === 'limit' ? limitResetAt : null, permMode: c.permMode, crashed: c.crashed, prompt, resumable: c.status === 'ended' && c.tailer.exists }
+  return { id: c.id, cwd: c.cwd, sessionId: c.sessionId, status: c.status, model: t.model ?? bannerModel(c), branch: t.branch ?? c.gitBranch, tps: t.tps, feed: c.endNote ?? feed, subagents: subagentsOf(c), ...usageOf(t, c.subs), limitResetAt: c.status === 'limit' ? limitResetAt : null, permMode: c.permMode, waitKind: c.waitKind, crashed: c.crashed, prompt, resumable: c.status === 'ended' && c.tailer.exists }
 }
 
 // A running sub-agent is working by definition; it is only "waiting" when the parent is blocked on a dialog and this one has a pending tool.
@@ -158,7 +159,7 @@ function usageOf(t: Tailer['state'], subs: SubagentWatcher) {
 
 const dormantInfo = (d: Dormant): ChatInfo => {
   const t = d.tailer.state
-  return { id: d.id, cwd: d.cwd, sessionId: d.sessionId, status: 'ended', model: t.model, branch: t.branch, tps: t.tps, feed: t.feed.slice(-4), subagents: [], ...usageOf(t, d.subs), limitResetAt: null, permMode: null, crashed: false, prompt: null, resumable: true }
+  return { id: d.id, cwd: d.cwd, sessionId: d.sessionId, status: 'ended', model: t.model, branch: t.branch, tps: t.tps, feed: t.feed.slice(-4), subagents: [], ...usageOf(t, d.subs), limitResetAt: null, permMode: null, waitKind: null, crashed: false, prompt: null, resumable: true }
 }
 const allInfos = () => [...chats.values()].map(summary).concat([...dormant.values()].map(dormantInfo))
 const notifyChanged = () => {
@@ -189,7 +190,7 @@ function spawnChat(folder: string, args: string[], sessionId: string, resumed = 
   const p = pty.spawn(claudePath, args, { name: 'xterm-256color', cols: 80, rows: 24, cwd, env })
   log(`start pid=${p.pid} cwd=${cwd} ${args.join(' ')}`)
   const file = transcriptFile(cwd, sessionId)
-  const chat: Chat = { id, pty: p, cwd, sessionId, status: 'working', buffer: '', lastData: Date.now(), lastInput: 0, tailer: new Tailer(file), subs: new SubagentWatcher(path.join(path.dirname(file), sessionId, 'subagents')), screen: new Terminal({ cols: 80, rows: 24, allowProposedApi: true }), gitBranch: null, killed: false, seenReply: null, crashed: false, endNote: null, screenModel: null, permMode: null, prev: undefined }
+  const chat: Chat = { id, pty: p, cwd, sessionId, status: 'working', buffer: '', lastData: Date.now(), lastInput: 0, tailer: new Tailer(file), subs: new SubagentWatcher(path.join(path.dirname(file), sessionId, 'subagents')), screen: new Terminal({ cols: 80, rows: 24, allowProposedApi: true }), gitBranch: null, killed: false, seenReply: null, waitKind: null, crashed: false, endNote: null, screenModel: null, permMode: null, prev: undefined }
   if (resumed) { chat.tailer.catchUp(); chat.subs.catchUp() } // history is shown; its stale limit / pending-tool state is not
   // Branch for the card before the first transcript entry exists.
   execFile('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], (err, out) => { if (!err) chat.gitBranch = out.trim() })
@@ -296,6 +297,7 @@ function tick() {
       : waitingForUser(screenBottom(c)) || c.tailer.state.pending.size > 0 ? 'waiting'
       : 'idle'
   }
+  for (const c of live) c.waitKind = c.status === 'waiting' ? dialogKind(screenBottom(c, 30)) : null
   for (const c of live) c.permMode = permissionMode(screenBottom(c, 6)) ?? c.permMode
   attend(live, limited)
   setAwake(wantAwake(keepAwake, live))
@@ -315,7 +317,7 @@ function attend(live: Chat[], limited: boolean) {
   const enabled = notifyOn && !quiet && Notification.isSupported()
   const plans = [
     ...planNotifications(
-      live.map((c) => ({ id: c.id, cwd: c.cwd, name: titles[c.sessionId], status: c.status, prev: c.prev, detail: c.status === 'limit' ? (c.tailer.state.limit ?? '') : dialogText(c).slice(0, 3).join(' · ') })),
+      live.map((c) => ({ id: c.id, cwd: c.cwd, name: titles[c.sessionId], status: c.status, prev: c.prev, kind: c.waitKind, detail: c.status === 'limit' ? (c.tailer.state.limit ?? '') : dialogText(c).slice(0, 3).join(' · ') })),
       { enabled, watching },
     ),
     ...planFinished(

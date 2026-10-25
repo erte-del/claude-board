@@ -2,6 +2,8 @@
 // A stand-in for the real `claude`, for the smoke tests: a real program on a real pty that writes real-format transcripts, but
 // replies instantly, costs nothing, and can be told to misbehave. Type one of these at its prompt:
 //   ask          show a permission dialog (as the real one words it) and wait for 1 / Enter / Esc
+//   question     show a question dialog (options + "Enter to select" footer)
+//   trust        show the folder-trust dialog (unnumbered options)
 //   sleep N      show a working spinner for N seconds, then reply
 //   limit S      hit a usage limit that lifts at the next whole minute at least S seconds away
 //   agent        start a sub-agent that finishes after a few seconds
@@ -47,6 +49,7 @@ const prompt = () => write(`\r\n${STATUS[permMode]}\r\n❯ `)
 prompt()
 
 let line = ''
+let dialogUp = 4 // lines to move up from the cursor to the first line of the dialog on screen
 let mode = 'input' // 'input' | 'dialog' | 'busy'
 
 function reply(text) {
@@ -67,7 +70,18 @@ function submit(text) {
   if (cmd === 'crash' || cmd === 'crashloop') { process.stderr.write('fatal: stub crash\n'); process.exit(1) }
   if (cmd === 'ask') {
     mode = 'dialog'
+    dialogUp = 4
     write(' touch stub-file\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. Yes, and don’t ask again for: touch *\r\n  3. Yes, and switch to auto mode') // the real wording; digits answer at once
+    return
+  }
+  if (cmd === 'question') {
+    mode = 'dialog'; dialogUp = 3
+    write('Which colour do you prefer?\r\n❯ 1. Red\r\n  2. Blue\r\nEnter to select · ↑/↓ to navigate · Esc to cancel')
+    return
+  }
+  if (cmd === 'trust') {
+    mode = 'dialog'; dialogUp = 3
+    write('Is this a project you trust?\r\n  Yes, I trust this folder\r\n  No, exit\r\nEnter to confirm · Esc to cancel')
     return
   }
   if (cmd === 'sleep') {
@@ -115,7 +129,7 @@ process.stdin.on('data', (chunk) => {
     if (part === '\x1b[200~') { pasting = true; continue }
     if (part === '\x1b[201~') { pasting = false; continue }
     if (mode === 'dialog') {
-      const erase = '\r\x1b[4A\x1b[J' // the dialog is 5 lines tall: move to its first line and clear it, like the real one
+      const erase = `\r\x1b[${dialogUp}A\x1b[J` // move to the dialog's first line and clear it, like the real one
       if (part.includes('\r') || part === '1') { write(erase); return reply('answered: yes') }
       if (part === '2' || part === '3') { write(erase); return reply(`answered: option ${part}`) }
       if (part === '\x1b') { write(erase); return reply('answered: no') }

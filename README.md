@@ -155,6 +155,8 @@ what it is asking; clicking it opens that chat. A usage limit gives one notifica
 badge: the number of chats waiting, or `!` while a limit is hit. Nothing is shown for a chat you are already looking at
 (window focused, on the board or inside that chat). Turn it off in Customize (⌘,) → **Notify me when a chat needs me**.
 
+**What is it waiting for?** A waiting card says so where the tokens/s normally are: `needs Yes/No` (a tool permission), `question` (Claude asked you something) or `trust?` (the folder-trust dialog, which you must answer yourself in the chat). The "needs you" notification says the same. A chat waiting only on a tool call in flight just says it needs you.
+
 **More notification options** (Customize): *Also notify when a chat finishes* (off by default) shows the first line of Claude's last reply when a chat goes from working to idle, except for the chat you're looking at; the 🔔 on a card (hover it) mutes that one chat. *Sound with that notification* plays a sound for "needs you" notifications; with it off they are silent. *Quiet hours* silences every notification between two hours (the Dock badge still updates).
 
 **Keep Mac awake** (Customize → Off / When working / Always) stops the Mac from sleeping, so long chats aren't cut off. "When working" only holds it while a chat is producing output. It is off by default; the display may still sleep.

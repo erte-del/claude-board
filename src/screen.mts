@@ -21,6 +21,20 @@ export const permissionMode = (screenLines: string[]): PermMode | null => {
   return null
 }
 
+export type WaitKind = 'permission' | 'question' | 'trust'
+
+/**
+ * dialogKind: what kind of dialog is blocking the chat. Trust ("Is this a project you trust?") must never be answered from outside;
+ * permission is a tool "Do you want to …?" question; anything else with dialog footers/options is a question Claude asked.
+ * Null when no dialog shows (a pending tool call alone doesn't say which).
+ */
+export const dialogKind = (screenLines: string[]): WaitKind | null => {
+  const text = screenLines.join('\n')
+  if (/project you trust|trust the files in this folder/i.test(text)) return 'trust'
+  if (permissionPrompt(screenLines) || /^[\s│┃]*Do you want to .+\?\s*[│┃]*$/m.test(text)) return 'permission'
+  return waitingForUser(screenLines) ? 'question' : null
+}
+
 export type Permission = { question: string; yes: string; no: string }
 
 const OPTION = /^[❯>]?\s*(\d+)\.\s+(.+)$/

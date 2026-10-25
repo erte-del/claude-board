@@ -1,5 +1,6 @@
 export type AttnStatus = 'working' | 'idle' | 'waiting' | 'limit' | 'ended'
-export type AttnChat = { id: string; cwd: string; name?: string; status: AttnStatus; prev?: AttnStatus; detail: string }
+export type AttnChat = { id: string; cwd: string; name?: string; status: AttnStatus; prev?: AttnStatus; detail: string; kind?: 'permission' | 'question' | 'trust' | null }
+const WAITING_TITLE = { permission: 'needs a Yes/No', question: 'asked you a question', trust: 'asks whether you trust this folder' }
 export type Plan = { title: string; body: string; chatId: string; kind: 'waiting' | 'limit' | 'finished' }
 
 const base = (p: string) => p.split('/').filter(Boolean).pop() ?? p
@@ -16,7 +17,7 @@ export function planNotifications(chats: AttnChat[], opts: { enabled: boolean; w
   const limited = chats.filter((c) => c.status === 'limit' && c.prev !== 'limit')
   for (const c of chats) {
     if (c.status === 'waiting' && c.prev !== 'waiting' && !opts.watching(c.id)) {
-      out.push({ title: `${c.name || base(c.cwd)} needs you`, body: clip(c.detail) || 'Waiting for your input', chatId: c.id, kind: 'waiting' })
+      out.push({ title: `${c.name || base(c.cwd)} ${c.kind ? WAITING_TITLE[c.kind] : 'needs you'}`, body: clip(c.detail) || 'Waiting for your input', chatId: c.id, kind: 'waiting' })
     }
   }
   const first = limited.find((c) => !opts.watching(c.id)) && limited[0]

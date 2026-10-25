@@ -423,7 +423,14 @@ export function createBoard(root: HTMLElement, h: Handlers) {
       e.mode.textContent = c.permMode ? MODE_LABEL[c.permMode] : ''
       e.mode.className = `mode${c.permMode === 'auto' || c.permMode === 'bypass' ? ' risky' : ''}`
       e.mode.title = 'Permission mode (shift+tab in the chat cycles it)'
-      if (c.status === 'limit') { // in place of tokens/s: how long until the limit lifts
+      const ALERT = { permission: 'Needs a Yes/No: a tool permission', question: 'Claude asked you a question', trust: 'Trust dialog: answer it in the chat' }
+      const TAG = { permission: 'needs Yes/No', question: 'question', trust: 'trust?' }
+      const alertEl = e.card.querySelector('.alert')
+      if (alertEl) alertEl.setAttribute('title', c.status === 'waiting' && c.waitKind ? ALERT[c.waitKind] : 'Waiting for your input')
+      if (c.status === 'waiting' && c.waitKind) { // in place of tokens/s: what it wants
+        e.tps.textContent = TAG[c.waitKind]
+        e.tps.title = ALERT[c.waitKind]
+      } else if (c.status === 'limit') { // in place of tokens/s: how long until the limit lifts
         e.tps.textContent = c.limitResetAt ? `↻ ${formatCountdown(c.limitResetAt - Date.now())}` : 'limit'
         e.tps.title = c.limitResetAt ? `Limit lifts ${new Date(c.limitResetAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : 'Usage limit reached'
       } else {

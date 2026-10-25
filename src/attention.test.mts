@@ -94,3 +94,11 @@ test('quiet hours: a window, one that wraps midnight, and none', () => {
   assert.deepEqual([21, 22, 23, 0, 7, 8, 12].map((h) => inQuietHours(h, 22, 8)), [false, true, true, true, true, false, false])
   assert.equal(inQuietHours(10, 8, 8), false)
 })
+
+test('the waiting notification says what kind of thing the chat wants', () => {
+  const t = (kind: AttnChat['kind']) => planNotifications([chat({ id: 'a', status: 'waiting', prev: 'working', kind })], away)[0].title
+  assert.equal(t('permission'), 'proj needs a Yes/No')
+  assert.equal(t('question'), 'proj asked you a question')
+  assert.equal(t('trust'), 'proj asks whether you trust this folder')
+  assert.equal(t(null), 'proj needs you')
+})

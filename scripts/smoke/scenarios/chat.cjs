@@ -62,7 +62,18 @@ module.exports = async function (t) {
   t.check('the Dock badge counts it', !!(await t.waitFor(() => t.badge() === '1', { timeout: 3000 })), t.badge())
   t.check('the card has its orange alert badge', await t.js(`getComputedStyle(document.querySelector('.card .alert')).display !== 'none'`))
   await t.js(`api.ptyWrite(${JSON.stringify(id)}, '\\r')`)
+  { const c = await info(id); const tag = await t.waitFor(async () => /needs Yes\/No/.test(await t.text('.card .tps', 0)) || null, { timeout: 3000 })
+    t.check('a tool permission is labelled as such on the card, in the data and the alert tooltip', c.waitKind === 'permission' && !!tag && (await t.js(`document.querySelector('.card .alert').title`)).includes('Yes/No'), JSON.stringify([c.waitKind, await t.text('.card .tps', 0)])) }
   t.check('answering returns it to idle and clears the badge', !!(await t.waitFor(async () => (await info(id)).status === 'idle' && t.badge() === '', { timeout: 8000 })), t.badge())
+  for (const [cmd, kind, tag, key] of [['question', 'question', 'question', '\x1b'], ['trust', 'trust', 'trust?', '\x1b']]) {
+    await t.say(id, cmd)
+    const ok = await t.waitFor(async () => (await info(id)).waitKind === kind, { timeout: 8000 })
+    t.check(`a ${cmd} dialog is told apart from a permission: kind "${kind}"`, !!ok, JSON.stringify((await info(id)).waitKind))
+    t.check(`and its card says "${tag}"`, !!(await t.waitFor(async () => (await t.text('.card .tps', 0)) === tag, { timeout: 3000 })), await t.text('.card .tps', 0))
+    t.check(`a ${cmd} dialog gets no Yes/No buttons`, (await info(id)).prompt === null)
+    await t.js(`api.ptyWrite(${JSON.stringify(id)}, ${JSON.stringify(key)})`)
+    await t.waitFor(async () => (await info(id)).status === 'idle', { timeout: 8000 })
+  }
 
   // ---- Yes / No buttons on the card answer a permission question
   const btn = (sel) => t.js(`(()=>{const b=document.querySelector('.card .ask ${sel}'); return b && getComputedStyle(b).display !== 'none' && !b.closest('[hidden]') ? b.textContent : null})()`)

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { permissionMode, waitingForUser } from './screen.mts'
+import { dialogKind, permissionMode, waitingForUser } from './screen.mts'
 
 test('recognises question, permission and trust dialogs', () => {
   assert.ok(waitingForUser(['Do you prefer red or blue?', '❯ 1. Red', '  2. Blue', 'Enter to select · ↑/↓ to navigate · Esc to cancel']))
@@ -48,4 +48,12 @@ test('permissionMode reads the mode off the status line (strings from a real cla
   assert.equal(permissionMode(['⏸ manual mode on', '⏵⏵ auto mode on']), 'auto') // the lowest row wins
   assert.equal(permissionMode(['Do you want to proceed?', '❯ 1. Yes']), null) // a dialog hides the line
   assert.equal(permissionMode(['we should turn auto mode on later']), null)
+})
+
+test('dialogKind tells permission, question and trust dialogs apart', () => {
+  assert.equal(dialogKind(['touch stub-file', 'Do you want to proceed?', '❯ 1. Yes', '  2. Yes, and don’t ask again for: touch *']), 'permission')
+  assert.equal(dialogKind(['Do you want to make this edit to src/a.ts?', '❯ 1. Yes', '  2. No', 'Esc to cancel']), 'permission') // even if Yes/No can't be answered from outside
+  assert.equal(dialogKind(['Which colour?', '❯ 1. Red', '  2. Blue', 'Enter to select · ↑/↓ to navigate · Esc to cancel']), 'question')
+  assert.equal(dialogKind(['Is this a project you trust?', '  Yes, I trust this folder', '  No, exit', 'Enter to confirm · Esc to cancel']), 'trust')
+  assert.equal(dialogKind(['❯ ', '⏵⏵ auto mode on (shift+tab to cycle)']), null)
 })
