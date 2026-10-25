@@ -7,6 +7,7 @@ const api = {
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke('pickFolder'),
   resolveDir: (input: string): Promise<{ ok: true; path: string } | { ok: false; error: string }> => ipcRenderer.invoke('resolveDir', input),
   newChat: (cwd: string, prompt?: string): Promise<{ ok: true; id: string } | { ok: false; error: string }> => ipcRenderer.invoke('newChat', cwd, prompt),
+  forkChat: (sessionId: string): Promise<{ ok: true; id: string } | { ok: false; error: string }> => ipcRenderer.invoke('forkChat', sessionId),
   resumeChat: (sessionId: string): Promise<{ ok: true; id: string } | { ok: false; error: string }> => ipcRenderer.invoke('resumeChat', sessionId),
   listHistory: (): Promise<SessionInfo[]> => ipcRenderer.invoke('listHistory'),
   addChat: (sessionId: string): Promise<{ ok: true } | { ok: false; error: string }> => ipcRenderer.invoke('addChat', sessionId),

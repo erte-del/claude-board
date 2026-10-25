@@ -15,7 +15,7 @@ const MINI_W = 150, MINI_H = 74, MINI_GAP = 6, CARD_PAD = 12
 let SPAN = 230, MIN_RING = 250 // nominal spacing between neighbours on a ring, and the smallest ring radius (follow the card width)
 const GRID = 24 // dot-grid spacing
 
-type Handlers = { open(chatId: string, beside?: boolean): void; resume(sessionId: string, beside?: boolean): void; kill(chatId: string): void; restart(sessionId: string): void; newIn(cwd: string): void; answer(chatId: string, question: string, yes: boolean): void; save(l: Layout): void }
+type Handlers = { open(chatId: string, beside?: boolean): void; resume(sessionId: string, beside?: boolean): void; kill(chatId: string): void; restart(sessionId: string): void; fork(sessionId: string): void; newIn(cwd: string): void; answer(chatId: string, question: string, yes: boolean): void; save(l: Layout): void }
 type MiniEls = { el: HTMLElement; title: HTMLElement; feed: HTMLElement; feedSig: string }
 type CardEls = {
   card: HTMLElement; idx: HTMLElement; kill: HTMLElement; mute: HTMLElement; name: HTMLElement; nameInput: HTMLInputElement; use: HTMLElement; ctx: HTMLElement; cost: HTMLElement; bar: HTMLElement; model: HTMLElement; branch: HTMLElement; mode: HTMLElement; tps: HTMLElement; feed: HTMLElement; ask: HTMLElement; restart: HTMLElement; feedSig: string
@@ -264,6 +264,10 @@ export function createBoard(root: HTMLElement, h: Handlers) {
     kill.title = 'Kill this chat'
     kill.onpointerdown = (e) => e.stopPropagation()
     kill.onclick = () => { const c = chats.find((x) => x.sessionId === key); if (c) h.kill(c.id) }
+    const fork = el('button', 'fork', '⑂') // start a new chat from a copy of this one's history
+    fork.title = 'Fork: a new chat that continues from this one'
+    fork.onpointerdown = (e) => e.stopPropagation()
+    fork.onclick = (e) => { e.stopPropagation(); h.fork(key) }
     const mute = el('button', 'mute', '🔔') // no "finished" notifications for this chat
     mute.onpointerdown = (e) => e.stopPropagation()
     mute.onclick = (e) => {
@@ -296,7 +300,7 @@ export function createBoard(root: HTMLElement, h: Handlers) {
     restart.onpointerdown = (e) => e.stopPropagation()
     restart.onclick = (e) => { e.stopPropagation(); h.restart(key) }
     ask.append(restart)
-    card.append(name, nameInput, head, sub, use, meter, el('hr'), feed, ask, subs, alert, idx, rename, mute, kill)
+    card.append(name, nameInput, head, sub, use, meter, el('hr'), feed, ask, subs, alert, idx, rename, mute, fork, kill)
     card.onpointerdown = (e) => {
       const c = chats.find((x) => x.sessionId === key)
       if (c) startDrag(e, { kind: 'card', key, orig: { ...layout.cards[key] }, onClick: (shift) => activate(c, shift) })

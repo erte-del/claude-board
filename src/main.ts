@@ -41,6 +41,7 @@ type Chat = {
   prev?: Status // status at the previous tick, to spot transitions
   killed: boolean // ended because the user killed it
   seenReply: string | null // last reply already announced (or present before this process started), so "finished" fires once per new reply
+  forked: boolean // started as a fork: its history is copied in when the transcript first appears, and none of it is news
   ctxLevel: CtxLevel | null // context warning level last seen (null = not yet seen)
   waitKind: WaitKind | null // what the dialog blocking this chat is (set each tick while waiting)
   crashed: boolean // ended with a non-zero exit or a signal, not killed by the user
@@ -191,7 +192,7 @@ function spawnChat(folder: string, args: string[], sessionId: string, resumed = 
   const p = pty.spawn(claudePath, args, { name: 'xterm-256color', cols: 80, rows: 24, cwd, env })
   log(`start pid=${p.pid} cwd=${cwd} ${args.join(' ')}`)
   const file = transcriptFile(cwd, sessionId)
-  const chat: Chat = { id, pty: p, cwd, sessionId, status: 'working', buffer: '', lastData: Date.now(), lastInput: 0, tailer: new Tailer(file), subs: new SubagentWatcher(path.join(path.dirname(file), sessionId, 'subagents')), screen: new Terminal({ cols: 80, rows: 24, allowProposedApi: true }), gitBranch: null, killed: false, seenReply: null, ctxLevel: null, waitKind: null, crashed: false, endNote: null, screenModel: null, permMode: null, prev: undefined }
+  const chat: Chat = { id, pty: p, cwd, sessionId, status: 'working', buffer: '', lastData: Date.now(), lastInput: 0, tailer: new Tailer(file), subs: new SubagentWatcher(path.join(path.dirname(file), sessionId, 'subagents')), screen: new Terminal({ cols: 80, rows: 24, allowProposedApi: true }), gitBranch: null, killed: false, seenReply: null, forked: false, ctxLevel: null, waitKind: null, crashed: false, endNote: null, screenModel: null, permMode: null, prev: undefined }
   if (resumed) { chat.tailer.catchUp(); chat.subs.catchUp() } // history is shown; its stale limit / pending-tool state is not
   // Branch for the card before the first transcript entry exists.
   execFile('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], (err, out) => { if (!err) chat.gitBranch = out.trim() })
@@ -267,6 +268,25 @@ function resumeChat(sessionId: string): { ok: true; id: string } | { ok: false; 
   }
 }
 
+// A new chat that starts from a copy of this one's history: `claude --resume <id> --fork-session`, under a session id we choose.
+function forkChat(sessionId: string): { ok: true; id: string } | { ok: false; error: string } {
+  const src = [...chats.values()].find((c) => c.sessionId === sessionId)
+  const cwd = dormant.get(sessionId)?.cwd ?? src?.cwd
+  if (!cwd) return { ok: false, error: 'That chat is no longer on the board.' }
+  if (src && !src.tailer.exists) return { ok: false, error: 'Nothing to fork yet: this chat has no messages.' }
+  try {
+    const newId = randomUUID()
+    const id = spawnChat(cwd, ['--resume', sessionId, '--fork-session', '--session-id', newId], newId)
+    chats.get(id)!.forked = true
+    registry.push({ sessionId: newId, cwd: chats.get(id)!.cwd })
+    void writeJson('chats.json', registry)
+    return { ok: true, id }
+  } catch (e) {
+    log(`fork ${sessionId} failed: ${e instanceof Error ? e.stack : e}`)
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
 function forget(sessionId: string) {
   registry = registry.filter((r) => r.sessionId !== sessionId)
   void writeJson('chats.json', registry)
@@ -286,7 +306,15 @@ function stopChat(c: Chat) {
 
 function tick() {
   const live = [...chats.values()].filter((c) => c.status !== 'ended')
-  for (const c of live) { c.tailer.poll(); c.subs.poll() }
+  for (const c of live) {
+    c.tailer.poll(); c.subs.poll()
+    if (c.forked && c.tailer.exists) { // the copied history arrived: forget what only matters live, like a resume does
+      c.forked = false
+      const s = c.tailer.state
+      s.limit = null; s.limitResetAt = null; s.pending.clear()
+      c.seenReply = s.lastReply
+    }
+  }
   // A limit holds until a normal reply clears it, or until the time its notice gave has passed (nobody has to reply for it to lift).
   const limitActive = (c: Chat) => !!c.tailer.state.limit && !(c.tailer.state.limitResetAt && Date.now() >= c.tailer.state.limitResetAt)
   const limited = live.some(limitActive)
@@ -386,6 +414,7 @@ ipcMain.handle('openChat', (_e, id: string) => {
   return c.buffer
 })
 ipcMain.handle('listChats', () => allInfos())
+ipcMain.handle('forkChat', async (_e, sessionId: string) => { await envReady; return forkChat(sessionId) })
 ipcMain.handle('resumeChat', async (_e, sessionId: string) => { await envReady; return resumeChat(sessionId) })
 
 // "Add existing chat": anything in Claude Code's history that isn't already on the board (and has at least one message).

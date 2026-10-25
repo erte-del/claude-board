@@ -136,15 +136,18 @@ button.toggle.on { background: var(--accent); border-color: transparent; color: 
 .f.tool { color: var(--muted); }
 .f.dim { color: var(--muted); opacity: 0.7; }
 @keyframes rise { from { opacity: 0; transform: translateY(4px); } }
-.kill, .edit, .mute { position: absolute; top: 6px; padding: 0 6px; font-size: 11px; display: none; }
+.kill, .edit, .mute, .fork { position: absolute; top: 6px; padding: 0 6px; font-size: 11px; display: none; }
 .kill { right: 6px; }
 .edit { right: 32px; }
 .mute { right: 58px; }
+.fork { right: 84px; }
+.card:hover .fork { display: block; }
 .card:hover .mute, .card .mute.on { display: block; }
 .card:hover .edit { display: block; }
 .card.s-waiting .kill { right: 28px; } /* make room for the alert badge */
 .card.s-waiting .edit { right: 54px; }
 .card.s-waiting .mute { right: 80px; }
+.card.s-waiting .fork { right: 106px; }
 
 /* the name you gave a chat: the card's first line */
 .name { flex: none; height: 22px; line-height: 20px; font-weight: 650; font-size: 1.18em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 58px; }

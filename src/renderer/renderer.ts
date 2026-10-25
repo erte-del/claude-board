@@ -155,7 +155,7 @@ function toggleSplitMenu() {
 }
 $('split').onclick = toggleSplitMenu
 
-const board = createBoard($('board'), { open: openFromBoard, resume: resumeFromBoard, kill: (id) => void api.killChat(id), restart: (s) => void api.resumeChat(s).then((r) => { if (!r.ok) showError(r.error) }), newIn: (cwd) => void startChat(cwd), answer: (id, q, yes) => void api.answerPrompt(id, q, yes ? 'yes' : 'no'), save: (l) => void api.saveLayout(l) })
+const board = createBoard($('board'), { open: openFromBoard, resume: resumeFromBoard, kill: (id) => void api.killChat(id), fork: (s) => void api.forkChat(s).then((r) => { if (!r.ok) showError(r.error) }), restart: (s) => void api.resumeChat(s).then((r) => { if (!r.ok) showError(r.error) }), newIn: (cwd) => void startChat(cwd), answer: (id, q, yes) => void api.answerPrompt(id, q, yes ? 'yes' : 'no'), save: (l) => void api.saveLayout(l) })
 
 // ---- settings: applied live, saved shortly after the last change
 let saveTimer = 0

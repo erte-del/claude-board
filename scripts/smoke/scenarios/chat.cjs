@@ -279,4 +279,24 @@ module.exports = async function (t) {
     const plain = await start('')
     await t.sleep(1500)
     t.check('without a prompt the chat just waits at its prompt', !(await info(plain.id)).feed.some((f) => f.includes('echo:'))) }
+
+  // ---- fork: a new chat from a copy of this one's history, under a new session id
+  { const readLog = () => { try { return fs.readFileSync(path.join(t.data, 'claude-board.log'), 'utf8') } catch { return '' } }
+    const src = await info(id)
+    const before = (await t.chats()).map((c) => c.id)
+    await t.js(`document.querySelectorAll('.card')[0].querySelector('.fork').click()`)
+    const fork = await t.waitFor(async () => (await t.chats()).find((c) => !before.includes(c.id)), { timeout: 8000 })
+    t.check('the fork button starts a new chat (a new card, a new session)', !!fork && fork.sessionId !== src.sessionId, JSON.stringify(fork && fork.sessionId))
+    t.check('it was started with --resume <source> --fork-session and its own --session-id', readLog().includes(`--resume ${src.sessionId} --fork-session --session-id ${fork.sessionId}`), readLog().slice(-300))
+    t.check('it shows the history it was forked from', !!(await t.waitFor(async () => (await t.chats()).find((c) => c.id === fork.id).feed.some((f) => f.includes('echo: hello')), { timeout: 8000 })))
+    t.check('and settles to idle, not limit or waiting', !!(await t.waitFor(async () => (await t.chats()).find((c) => c.id === fork.id).status === 'idle', { timeout: 8000 })))
+    await t.say(fork.id, 'only in the fork')
+    const file = (sid) => path.join(t.home, '.claude', 'projects', fs.realpathSync(A).replace(/[^a-zA-Z0-9]/g, '-'), sid + '.jsonl')
+    await t.waitFor(() => fs.existsSync(file(fork.sessionId)) && fs.readFileSync(file(fork.sessionId), 'utf8').includes('only in the fork'), { timeout: 8000 })
+    t.check('new messages go to the fork\'s transcript only', fs.readFileSync(file(fork.sessionId), 'utf8').includes('only in the fork') && !fs.readFileSync(file(src.sessionId), 'utf8').includes('only in the fork'))
+    t.check('the source chat is untouched and still running', (await info(id)).status !== 'ended')
+    const empty = await t.newChat(A)
+    await t.waitFor(async () => (await info(empty)).status === 'idle', { timeout: 8000 })
+    const r = await t.js(`api.forkChat(${JSON.stringify((await info(empty)).sessionId)})`)
+    t.check('a chat with no messages says there is nothing to fork', r.ok === false && /Nothing to fork/.test(r.error), JSON.stringify(r)) }
 }

@@ -12,6 +12,7 @@
 //   quiet        report $BROWSER and the first PATH folder (the no-focus shim)
 //   crashloop    like crash, and every later --resume crashes at once too (for the auto-restart limit)
 //   exit         exit normally
+//   (`--resume A --fork-session --session-id B` starts B with a copy of A's history)
 // An opening prompt (the argument after `--`) is submitted at start-up, as if typed.
 //   anything else: replies "echo: <text>"
 const fs = require('fs')
@@ -24,6 +25,11 @@ const sid = flag('--session-id') || flag('--resume') || 'stub-session'
 const cwd = process.cwd()
 const dir = path.join(process.env.HOME, '.claude', 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'))
 const file = path.join(dir, `${sid}.jsonl`)
+const forkFrom = args.includes('--fork-session') ? flag('--resume') : null
+if (forkFrom && forkFrom !== sid) { // a fork starts with its own copy of the history, filed under the new id
+  const from = path.join(dir, `${forkFrom}.jsonl`)
+  if (fs.existsSync(from)) { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(file, fs.readFileSync(from, 'utf8').split('\n').map((l) => l.replace(`"sessionId":"${forkFrom}"`, `"sessionId":"${sid}"`)).join('\n')) }
+}
 const now = () => new Date().toISOString()
 const write = (s) => process.stdout.write(s)
 
