@@ -1,6 +1,6 @@
 {
   "name": "claude-board",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "One window for all your terminal Claude Code chats",
   "main": "dist/main.js",
   "scripts": {
