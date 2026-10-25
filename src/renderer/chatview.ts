@@ -258,6 +258,10 @@ export function createChatView(d: Deps) {
       layout()
       const replay = await d.api.openChat(id)
       if (replay) p.term.write(replay)
+      // The replay is only the tail of what Claude Code drew, and it repaints just what changed, so the screen comes out
+      // with missing letters and stray fragments. A resize makes it repaint everything; one column narrower first, because
+      // a resize to the size the pty already has sends no signal.
+      if (p.term.cols > 1) d.api.ptyResize(id, p.term.cols - 1, p.term.rows)
       d.api.ptyResize(id, p.term.cols, p.term.rows)
       focus(p)
     } finally {
