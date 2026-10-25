@@ -191,7 +191,7 @@ function spawnChat(folder: string, args: string[], sessionId: string, resumed = 
   if (!dir.ok) throw new Error(dir.error)
   const cwd = dir.path // the real path: it is what the chat will report, and so where its transcript is filed
   const id = randomUUID()
-  let env = { ...process.env, ...shellEnv, TERM: 'xterm-256color', COLORTERM: 'truecolor' } as Record<string, string>
+  let env = { ...process.env, ...shellEnv, TERM: 'xterm-256color', COLORTERM: 'truecolor', CLAUDE_CODE_NO_FLICKER: '1' } as Record<string, string>
   // Don't inherit another Claude session's identity if the app was launched from inside one.
   for (const k of ['CLAUDECODE', 'CLAUDE_PID', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_EXECPATH', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_MESSAGING_SOCKET', 'CLAUDE_CODE_MESSAGING_TOKEN']) delete env[k]
   if (quietLaunch) env = quietEnv(env, shimDir())
