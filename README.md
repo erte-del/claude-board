@@ -157,6 +157,8 @@ badge: the number of chats waiting, or `!` while a limit is hit. Nothing is show
 
 **What is it waiting for?** A waiting card says so where the tokens/s normally are: `needs Yes/No` (a tool permission), `question` (Claude asked you something) or `trust?` (the folder-trust dialog, which you must answer yourself in the chat). The "needs you" notification says the same. A chat waiting only on a tool call in flight just says it needs you.
 
+**Context warnings:** a notification when a chat reaches 80% of its context window and again at 95% (not for the chat you're looking at, and not at launch for a chat that was already full). It only warns again after the fill drops clearly below the level, for example after `/compact`. It follows the *Notify me* switch and quiet hours.
+
 **More notification options** (Customize): *Also notify when a chat finishes* (off by default) shows the first line of Claude's last reply when a chat goes from working to idle, except for the chat you're looking at; the 🔔 on a card (hover it) mutes that one chat. *Sound with that notification* plays a sound for "needs you" notifications; with it off they are silent. *Quiet hours* silences every notification between two hours (the Dock badge still updates).
 
 **Keep Mac awake** (Customize → Off / When working / Always) stops the Mac from sleeping, so long chats aren't cut off. "When working" only holds it while a chat is producing output. It is off by default; the display may still sleep.

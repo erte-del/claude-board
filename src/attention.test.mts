@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { badgeText, firstLine, inQuietHours, planFinished, wantAwake, planLimitReset, planNotifications, type AttnChat } from './attention.mts'
+import { badgeText, contextLevel, planContext, firstLine, inQuietHours, planFinished, wantAwake, planLimitReset, planNotifications, type AttnChat } from './attention.mts'
 
 const chat = (o: Partial<AttnChat> & { id: string }): AttnChat => ({ cwd: '/p/proj', status: 'idle', detail: '', ...o })
 const away = { enabled: true, watching: () => false }
@@ -101,4 +101,38 @@ test('the waiting notification says what kind of thing the chat wants', () => {
   assert.equal(t('question'), 'proj asked you a question')
   assert.equal(t('trust'), 'proj asks whether you trust this folder')
   assert.equal(t(null), 'proj needs you')
+})
+
+test('contextLevel steps up at 80 and 95, and only steps down once clearly below', () => {
+  assert.deepEqual([0, 79, 80, 94, 95, 100].map((p) => contextLevel(p, 0)), [0, 0, 1, 1, 2, 2])
+  assert.equal(contextLevel(78, 1), 1) // hovering just under 80: still level 1
+  assert.equal(contextLevel(74, 1), 0)
+  assert.equal(contextLevel(92, 2), 2)
+  assert.equal(contextLevel(89, 2), 1)
+  assert.equal(contextLevel(null, 2), 2) // unknown keeps what we knew
+})
+
+test('context warnings: once at 80, once at 95, again only after a real drop', () => {
+  const run = (pct: number | null, level: 0 | 1 | 2 | null, watching = false) => planContext([{ id: 'a', cwd: '/p/proj', pct, level }], { enabled: true, watching: () => watching })
+  const a = run(81, 0)
+  assert.equal(a.plans.length, 1)
+  assert.equal(a.plans[0].title, 'proj: context 80% full')
+  assert.equal(a.levels.get('a'), 1)
+  assert.equal(run(83, 1).plans.length, 0) // still above 80: no repeat
+  const b = run(96, 1)
+  assert.equal(b.plans[0].title, 'proj: context 95% full')
+  assert.equal(run(97, 2).plans.length, 0)
+  assert.equal(run(50, 2).plans.length, 0) // after /compact: re-armed silently
+  assert.equal(run(85, run(50, 2).levels.get('a')!).plans.length, 1) // and warns again on the next climb
+})
+
+test('context warnings: not at first sight, not when off or watched, but the level is still recorded', () => {
+  const first = planContext([{ id: 'a', cwd: '/p/proj', pct: 90, level: null }], { enabled: true, watching: () => false })
+  assert.equal(first.plans.length, 0) // a restored chat that is already full
+  assert.equal(first.levels.get('a'), 1)
+  const off = planContext([{ id: 'a', cwd: '/p/proj', pct: 90, level: 0 }], { enabled: false, watching: () => false })
+  assert.equal(off.plans.length, 0)
+  assert.equal(off.levels.get('a'), 1)
+  assert.equal(planContext([{ id: 'a', cwd: '/p/proj', pct: 90, level: 0 }], { enabled: true, watching: () => true }).plans.length, 0)
+  assert.equal(planContext([{ id: 'a', cwd: '/p/proj', pct: null, level: null }], { enabled: true, watching: () => false }).levels.get('a'), 0)
 })

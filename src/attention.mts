@@ -1,7 +1,7 @@
 export type AttnStatus = 'working' | 'idle' | 'waiting' | 'limit' | 'ended'
 export type AttnChat = { id: string; cwd: string; name?: string; status: AttnStatus; prev?: AttnStatus; detail: string; kind?: 'permission' | 'question' | 'trust' | null }
 const WAITING_TITLE = { permission: 'needs a Yes/No', question: 'asked you a question', trust: 'asks whether you trust this folder' }
-export type Plan = { title: string; body: string; chatId: string; kind: 'waiting' | 'limit' | 'finished' }
+export type Plan = { title: string; body: string; chatId: string; kind: 'waiting' | 'limit' | 'finished' | 'context' }
 
 const base = (p: string) => p.split('/').filter(Boolean).pop() ?? p
 const clip = (s: string, n = 140) => (s.length > n ? s.slice(0, n - 1) + '…' : s)
@@ -66,4 +66,38 @@ export function planFinished(chats: FinishChat[], opts: { enabled: boolean; watc
 export function inQuietHours(hour: number, start: number, end: number): boolean {
   if (start === end) return false
   return start < end ? hour >= start && hour < end : hour >= start || hour < end
+}
+
+export type CtxLevel = 0 | 1 | 2 // below 80% / 80% and up / 95% and up
+
+/** The warning level for a context fill (percent). It only steps down once the fill is 5 points under the threshold, so hovering around 80% doesn't repeat the warning. */
+export function contextLevel(pct: number | null, prev: CtxLevel): CtxLevel {
+  if (pct === null) return prev
+  const up: CtxLevel = pct >= 95 ? 2 : pct >= 80 ? 1 : 0
+  if (up >= prev) return up
+  return pct >= 90 ? 2 : pct >= 75 ? 1 : 0 // fell: keep the old level until clearly below it
+}
+
+export type CtxChat = { id: string; cwd: string; name?: string; pct: number | null; level: CtxLevel | null }
+
+/**
+ * Context warnings: one when a chat first reaches 80% and one at 95%. `level` is what we last knew (null = never seen, so a chat
+ * restored at 90% doesn't warn at launch). Returns the plans and each chat's new level; the caller stores the levels even when
+ * nothing was shown, so a warning that was skipped (you were looking) isn't shown later.
+ */
+export function planContext(chats: CtxChat[], opts: { enabled: boolean; watching: (id: string) => boolean }): { plans: Plan[]; levels: Map<string, CtxLevel> } {
+  const plans: Plan[] = []
+  const levels = new Map<string, CtxLevel>()
+  for (const c of chats) {
+    const next = contextLevel(c.pct, c.level ?? 0)
+    levels.set(c.id, next)
+    if (c.level === null || next <= c.level || !opts.enabled || opts.watching(c.id)) continue
+    plans.push({
+      title: `${c.name || base(c.cwd)}: context ${next === 2 ? '95' : '80'}% full`,
+      body: next === 2 ? 'Almost out of room. Compact (/compact) or start a new chat.' : 'Consider compacting (/compact) before it fills up.',
+      chatId: c.id,
+      kind: 'context',
+    })
+  }
+  return { plans, levels }
 }

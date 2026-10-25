@@ -16,7 +16,7 @@ import { sanitizeRegistry, type RegEntry } from './registry.mts'
 import { SubagentWatcher, Tailer } from './tailer.mts'
 import { modelFromScreen, dialogKind, permissionMode, permissionPrompt, waitingForUser, type PermMode, type WaitKind } from './screen.mts'
 import { createLogger } from './logger.mts'
-import { badgeText, inQuietHours, planFinished, planLimitReset, planNotifications, wantAwake } from './attention.mts'
+import { badgeText, inQuietHours, planContext, planFinished, planLimitReset, planNotifications, wantAwake, type CtxLevel } from './attention.mts'
 import { CONTEXT_WINDOW } from './pricing.mts'
 import { restoreBounds } from './windowstate.mts'
 import { groupFontFiles } from './fontfiles.mts'
@@ -41,6 +41,7 @@ type Chat = {
   prev?: Status // status at the previous tick, to spot transitions
   killed: boolean // ended because the user killed it
   seenReply: string | null // last reply already announced (or present before this process started), so "finished" fires once per new reply
+  ctxLevel: CtxLevel | null // context warning level last seen (null = not yet seen)
   waitKind: WaitKind | null // what the dialog blocking this chat is (set each tick while waiting)
   crashed: boolean // ended with a non-zero exit or a signal, not killed by the user
   endNote: string[] | null // what the card shows once the process is gone
@@ -190,7 +191,7 @@ function spawnChat(folder: string, args: string[], sessionId: string, resumed = 
   const p = pty.spawn(claudePath, args, { name: 'xterm-256color', cols: 80, rows: 24, cwd, env })
   log(`start pid=${p.pid} cwd=${cwd} ${args.join(' ')}`)
   const file = transcriptFile(cwd, sessionId)
-  const chat: Chat = { id, pty: p, cwd, sessionId, status: 'working', buffer: '', lastData: Date.now(), lastInput: 0, tailer: new Tailer(file), subs: new SubagentWatcher(path.join(path.dirname(file), sessionId, 'subagents')), screen: new Terminal({ cols: 80, rows: 24, allowProposedApi: true }), gitBranch: null, killed: false, seenReply: null, waitKind: null, crashed: false, endNote: null, screenModel: null, permMode: null, prev: undefined }
+  const chat: Chat = { id, pty: p, cwd, sessionId, status: 'working', buffer: '', lastData: Date.now(), lastInput: 0, tailer: new Tailer(file), subs: new SubagentWatcher(path.join(path.dirname(file), sessionId, 'subagents')), screen: new Terminal({ cols: 80, rows: 24, allowProposedApi: true }), gitBranch: null, killed: false, seenReply: null, ctxLevel: null, waitKind: null, crashed: false, endNote: null, screenModel: null, permMode: null, prev: undefined }
   if (resumed) { chat.tailer.catchUp(); chat.subs.catchUp() } // history is shown; its stale limit / pending-tool state is not
   // Branch for the card before the first transcript entry exists.
   execFile('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], (err, out) => { if (!err) chat.gitBranch = out.trim() })
@@ -309,6 +310,13 @@ function setAwake(on: boolean) {
   else if (!on && blockerId !== null) { powerSaveBlocker.stop(blockerId); blockerId = null }
 }
 
+function ctxWarnings(live: Chat[], enabled: boolean, watching: (id: string) => boolean) {
+  const pct = (c: Chat) => { const t = c.tailer.state.contextTokens(), w = CONTEXT_WINDOW[c.tailer.state.lastModel() ?? '']; return t !== null && w ? (t / w) * 100 : null }
+  const { plans, levels } = planContext(live.map((c) => ({ id: c.id, cwd: c.cwd, name: titles[c.sessionId], pct: pct(c), level: c.ctxLevel })), { enabled, watching })
+  for (const c of live) if (pct(c) !== null) c.ctxLevel = levels.get(c.id) ?? c.ctxLevel // stays unseen until there is a usage figure
+  return plans
+}
+
 // Tell the user when a chat needs them while they're elsewhere: a notification (click opens that chat) and a Dock badge.
 function attend(live: Chat[], limited: boolean) {
   if (stopping) return // shutting down: no notifications, no badge changes
@@ -320,6 +328,7 @@ function attend(live: Chat[], limited: boolean) {
       live.map((c) => ({ id: c.id, cwd: c.cwd, name: titles[c.sessionId], status: c.status, prev: c.prev, kind: c.waitKind, detail: c.status === 'limit' ? (c.tailer.state.limit ?? '') : dialogText(c).slice(0, 3).join(' · ') })),
       { enabled, watching },
     ),
+    ...ctxWarnings(live, enabled, watching),
     ...planFinished(
       live.map((c) => ({ id: c.id, cwd: c.cwd, name: titles[c.sessionId], status: c.status, prev: c.prev, reply: c.tailer.state.lastReply, seen: c.seenReply, muted: muted[c.sessionId] })),
       { enabled: enabled && notifyPrefs.finish, watching },
