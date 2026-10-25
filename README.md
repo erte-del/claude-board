@@ -181,6 +181,8 @@ badge: the number of chats waiting, or `!` while a limit is hit. Nothing is show
 
 **Export / import the board layout** (Customize → Board layout): *Export…* saves card positions, names, notes, pins, mutes and folded folders to a JSON file; *Import…* replaces the current ones with a file's. Imports are checked field by field, so a damaged or foreign file is refused or its bad parts dropped. Cards are matched by chat id, so it restores a board on the same chats (for instance after a reinstall), not chats themselves.
 
+**First-launch tour:** a four-step walk through the board opens the first time you start the app (Next / Back / Skip, → ← and Esc work). Customize → Help → *Show the tour* opens it again. Whether you've seen it is kept in `tour.json`, separate from the settings, so *Reset to defaults* doesn't bring it back.
+
 **More notification options** (Customize): *Also notify when a chat finishes* (off by default) shows the first line of Claude's last reply when a chat goes from working to idle, except for the chat you're looking at; the 🔔 on a card (hover it) mutes that one chat. *Sound with that notification* plays a sound for "needs you" notifications; with it off they are silent. *Quiet hours* silences every notification between two hours (the Dock badge still updates).
 
 **Keep Mac awake** (Customize → Off / When working / Always) stops the Mac from sleeping, so long chats aren't cut off. "When working" only holds it while a chat is producing output. It is off by default; the display may still sleep.

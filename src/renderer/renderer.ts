@@ -2,6 +2,7 @@ import '@xterm/xterm/css/xterm.css'
 import './styles.css'
 import type { Api } from '../preload'
 import { createBoard } from './board'
+import { openTour } from './tour'
 import { createChatView } from './chatview'
 import { closePicker, pickerOpen } from './colorpicker'
 import { applySettings, createSettings, mergeSettings } from './settings'
@@ -189,6 +190,7 @@ function onSettings(s: Settings, persist = true) {
 }
 const drawer = createSettings($('settings'), settings, onSettings, {
   export: () => void api.loadLayout().then((l) => api.exportLayout(l)).then((r) => { if (r.ok) toast('Layout exported'); else if (r.error) toast(r.error) }),
+  tour: () => { drawer.close(); openTour(() => void api.markTourSeen()) },
   import: () => void api.importLayout().then((r) => { if (r.ok) { board.setLayout(r.layout); toast('Layout imported') } else if (r.error) toast(r.error) }),
 })
 fontsReady.then((list) => drawer.setFonts(list)).catch(() => {})
@@ -367,4 +369,5 @@ Promise.all([api.loadSettings(), api.loadLayout(), api.listChats()]).then(([s, l
   chats = c
   board.setLayout(l); board.setChats(c)
   syncHideEnded(); refreshCount()
+  void api.tourSeen().then((seen) => { if (!seen) openTour(() => void api.markTourSeen()) })
 })

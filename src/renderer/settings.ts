@@ -33,7 +33,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = '') 
   return e
 }
 
-export function createSettings(panel: HTMLElement, initial: Settings, onChange: (s: Settings) => void, layoutActions: { export(): void; import(): void }) {
+export function createSettings(panel: HTMLElement, initial: Settings, onChange: (s: Settings) => void, layoutActions: { export(): void; import(): void; tour(): void }) {
   let s = initial
   const emit = () => { applySettings(s); onChange(s) }
 
@@ -158,6 +158,15 @@ export function createSettings(panel: HTMLElement, initial: Settings, onChange: 
           ex.onclick = () => layoutActions.export()
           im.onclick = () => layoutActions.import()
           r.append(el('span', 'row-label', 'Positions, names, notes, pins'), ex, im)
+          return r
+        })()),
+      section('Help',
+        (() => {
+          const r = el('div', 'row')
+          const b = el('button', '', 'Show the tour')
+          b.type = 'button'
+          b.onclick = () => layoutActions.tour()
+          r.append(el('span', 'row-label', 'A quick walk through the board'), b)
           return r
         })()),
       section('Shortcuts', ...SHORTCUTS.map(([keys, what]) => {

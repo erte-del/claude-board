@@ -547,6 +547,9 @@ ipcMain.handle('pasteImage', async () => {
 // CB_OPEN lets the smoke tests substitute a recorder for /usr/bin/open.
 // A program in a chat asked to copy (OSC 52). Text only, capped; the renderer has already checked the setting.
 ipcMain.handle('copyText', async (_e, text: unknown) => { if (typeof text === 'string' && text.length <= 1_000_000) await clipboard.writeText(text) })
+// First-launch tour: seen once, remembered in its own file (so "Reset to defaults" doesn't bring it back).
+ipcMain.handle('tourSeen', () => (readJson('tour.json') as { seen?: boolean } | null)?.seen === true)
+ipcMain.handle('markTourSeen', () => writeJson('tour.json', { seen: true }))
 ipcMain.handle('editors', () => installedEditors(existsSync, os.homedir()).map(({ id, label }) => ({ id, label })))
 ipcMain.handle('openFolder', async (_e, sessionId: string, how: string): Promise<{ ok: true } | { ok: false; error: string }> => {
   const cwd = [...chats.values()].find((c) => c.sessionId === sessionId)?.cwd ?? dormant.get(sessionId)?.cwd

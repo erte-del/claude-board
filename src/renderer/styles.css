@@ -291,6 +291,18 @@ kbd { font: 11px var(--font-mono); color: var(--muted); background: var(--btn); 
 .ctxmenu button.danger { color: var(--c-limit); }
 .ctxmenu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; }
 
+/* ---- first-launch tour ---- */
+#tour { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: #0008; }
+.tour-box { width: min(440px, calc(100vw - 32px)); padding: 22px 24px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 16px 48px #000a; }
+.tour-box h2 { margin: 0 0 8px; font-size: 16px; }
+.tour-box p { margin: 0 0 18px; line-height: 1.5; color: var(--muted); font-size: 13px; }
+.tour-foot { display: flex; align-items: center; gap: 8px; }
+.tour-dots { flex: 1; display: flex; justify-content: center; gap: 6px; }
+.tour-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+.tour-dots i.on { background: var(--accent); }
+.tour-skip { background: transparent; border-color: transparent; color: var(--muted); }
+.tour-next { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
 /* ---- toast ---- */
 #toast { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 12px); display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font-size: 12px; box-shadow: 0 6px 24px #0006; opacity: 0; visibility: hidden; transition: opacity 0.2s, transform 0.2s, visibility 0s linear 0.2s; z-index: 50; }
 #toast.open { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition-delay: 0s; }

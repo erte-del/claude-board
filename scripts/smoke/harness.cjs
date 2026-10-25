@@ -12,6 +12,9 @@ const picked = { save: null, open: null } // file the next Export / Import dialo
 dialog.showSaveDialog = async () => ({ canceled: !picked.save, filePath: picked.save })
 dialog.showOpenDialog = async () => ({ canceled: !picked.open, filePaths: picked.open ? [picked.open] : [] })
 
+// The first-launch tour covers the window on a fresh data folder; every scenario but "tour" starts with it already seen.
+if (scenarioName !== 'tour' && !fs.existsSync(path.join(process.env.SMOKE_DATA, 'tour.json'))) { fs.mkdirSync(process.env.SMOKE_DATA, { recursive: true }); fs.writeFileSync(path.join(process.env.SMOKE_DATA, 'tour.json'), '{"seen":true}') }
+
 const spy = { writes: [], cols: {} } // what the renderer sent to ptys, and each pty's reported width
 ipcMain.on('pty:write', (_e, id, data) => spy.writes.push({ id, data }))
 ipcMain.on('pty:resize', (_e, id, cols) => { spy.cols[id] = cols })
