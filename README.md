@@ -1,22 +1,82 @@
 # Claude Board
 
-One window for all your terminal Claude Code chats. Every chat is a **real `claude` CLI running in a
-pseudo-terminal** (node-pty + xterm.js), so slash commands, permission prompts, colours, paste, resize
-and keyboard shortcuts behave as they do in Terminal.app. Nothing is re-implemented on top of the API.
+**All your terminal Claude Code chats on one board.** Every chat is a real `claude` CLI running in a pseudo-terminal
+(node-pty + xterm.js), so slash commands, permission prompts, colours, paste, resize and shortcuts behave exactly as they do in
+Terminal.app. Nothing is re-implemented on top of the API.
 
-- **Board** (home): a pannable, zoomable graph. Each project folder is a box in the middle; its chats are
-  cards on a ring around it, linked by lines.
-- **Chat view**: click a card to open it full-window. **← Board** (or ⌘⇧B) goes back; the chat keeps running.
+![The board: two project folders, each with its chats on a ring around it](docs/screenshots/board.png)
 
-macOS only (built and tested on Apple Silicon).
+Each project folder is a box in the middle, and its chats are cards around it. A card's outline tells you what the chat is doing
+at a glance, so you can leave ten of them running and see which one needs you.
 
-## Requirements
+| | |
+|---|---|
+| **Green** | working |
+| **Black** | idle, the turn is finished |
+| **Orange** `!` | waiting for you: a permission prompt, question or trust dialog |
+| **Red** | a usage limit was hit, with a countdown to when it lifts |
+| **Grey** | ended, click to resume |
+
+macOS only. The download is an Apple Silicon (arm64) build. On an Intel Mac, build from source (untested there).
+
+## Install
+
+**The quick way:** download `Claude-Board-1.0.0-arm64.zip` from the [latest release](https://github.com/erte-del/claude-board/releases/latest),
+unzip it and drag **Claude Board** to `Applications`.
+
+The app is ad-hoc signed, not notarized by Apple, so macOS blocks the first launch. Either right-click the app and choose **Open**,
+then **Open** again, or run this once:
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/Claude Board.app"
+```
+
+You also need [Claude Code](https://docs.claude.com/en/docs/claude-code) installed and signed in. The app finds `claude` through your
+own shell (`~/.zshrc`), or in `~/.local/bin`, `/opt/homebrew/bin` or `/usr/local/bin`. If it can't, a banner at the top says so.
+
+**From source:** see [Run from source](#run-from-source) below.
+
+## Quick start
+
+1. Press **⌘N**, type `cd ~/code/my-project` (or just a path) and press Enter. A card appears and Claude starts in that folder. **Browse folders…** is there if you'd rather pick one.
+2. Click the card to open the chat full-window. **⌘⇧B** goes back to the board; the chat keeps running.
+3. Start more chats, or press **+** on a folder's box to start another one in that folder.
+4. Press **⌘O** to put a chat from your Claude Code history on the board as a resumable card.
+5. Quit whenever you like: your chats come back as grey cards, and a click resumes them with `claude --resume`.
+
+## What it does
+
+### Know when a chat needs you, and answer it from the board
+
+![A card waiting on a permission question, with Yes and No buttons](docs/screenshots/waiting.png)
+
+An orange card with a `!` is waiting on you. For a permission question ("Do you want to proceed?") it shows what is being asked
+and **Yes** / **No** buttons, so you don't have to open the chat. You also get a macOS notification and a Dock badge (turn it off in
+Customize).
+
+### See usage limits coming and going
+
+![The same board with a usage limit hit: red cards with a countdown](docs/screenshots/limit.png)
+
+When a usage limit is hit, every chat turns red and shows when it lifts. The red clears by itself at that time.
+
+### Make it yours
+
+![The Customize panel](docs/screenshots/customize.png)
+
+Three themes, every status colour, card size, corner radius, link style, motion, and the terminal font (including your own
+monospace fonts). Press **⌘,**.
+
+Also: context % and estimated cost on each card, sub-agents as small cards inside their parent, rename cards, filter and
+fold folders, keyboard navigation, find in scrollback, drag a file into a chat, and two chats side by side.
+
+## Requirements (to build from source)
 
 - macOS, Node 24 (what it was built on; the tests and `npm run scan` run TypeScript directly, which needs a recent Node), npm
 - Xcode Command Line Tools (`xcode-select --install`), needed to build node-pty
 - Claude Code installed and working: `claude` must be on the PATH of your shell, or in `~/.local/bin`, `/opt/homebrew/bin` or `/usr/local/bin`
 
-## Run
+## Run from source
 
 ```sh
 npm install
@@ -191,7 +251,7 @@ it never touches your own `~/.claude`, settings or chats.
 - **Errors:** if `claude` is not found a banner says so (with Retry) and starting a chat reports the error in the
   new-chat bar. A chat that dies shows what it printed plus the exit code on its card, and in its terminal.
 - **New folders** show Claude's "trust this folder?" dialog, as in Terminal.app. The card goes orange until you answer.
-- Tokens/s includes thinking time and latency, so short replies read low. Model shows `—` until the first reply.
+- Tokens/s includes thinking time and latency, so short replies read low. The model comes from the start-up banner until the first reply writes it to the transcript.
 - **Dock/Finder launches get your shell's environment, not launchd's.** An app opened from the Dock only gets a bare PATH, so at
   startup the app asks your own shell (`$SHELL -ilc`, which reads `~/.zshrc`) for its environment once, finds `claude` on that PATH,
   and gives every chat that environment, so Claude's hooks, `node`, `npx` and MCP servers behave as they do in Terminal.app. If
@@ -200,7 +260,7 @@ it never touches your own `~/.claude`, settings or chats.
 
 ## Deliberately not built
 
-A signed/notarized installer, answering prompts from the board without opening the chat,
+A signed/notarized installer, answering questions that have their own options from the board (only Yes / No permission prompts get buttons),
 Tab-completion in the new-chat bar, per-folder colours,
 a custom theme editor, rebindable shortcuts.
 
@@ -211,3 +271,7 @@ Chat crashes, failed starts and app errors are appended to `claude-board.log` in
 ## Answering permission prompts from the board
 
 A card waiting on a tool-permission question ("Do you want to proceed?") shows **Yes** and **No**. Yes presses the plain "Yes" option (never "don't ask again" or "switch mode"); No presses Esc. The app re-reads the screen when you click and refuses if that exact question is no longer showing. Trust prompts and questions with their own options get no buttons: open the chat for those.
+
+## License
+
+[MIT](LICENSE)
