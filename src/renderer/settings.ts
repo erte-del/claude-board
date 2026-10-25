@@ -2,8 +2,8 @@ import { TERM_THEMES, termTheme } from '../termthemes.mts'
 import { closePicker, openPicker } from './colorpicker'
 import { DEFAULT_TERM_FONT, defaultSettings, type KeepAwake, type Settings, type StateKey, type Theme } from '../types'
 
-type NumKey = 'stallMinutes' | 'quietStart' | 'quietEnd' | 'cardW' | 'cardH' | 'radius' | 'cardFont' | 'lineWidth' | 'termFont'
-type BoolKey = 'curved' | 'grid' | 'motion' | 'notifications' | 'osc52' | 'finishNotify' | 'waitingSound' | 'quietHours' | 'autoResume' | 'quietLaunch'
+type NumKey = 'opacity' | 'stallMinutes' | 'quietStart' | 'quietEnd' | 'cardW' | 'cardH' | 'radius' | 'cardFont' | 'lineWidth' | 'termFont'
+type BoolKey = 'curved' | 'grid' | 'motion' | 'notifications' | 'launchAtLogin' | 'alwaysOnTop' | 'hotkey' | 'osc52' | 'finishNotify' | 'waitingSound' | 'quietHours' | 'autoResume' | 'quietLaunch'
 
 const STATES: [StateKey, string][] = [['working', 'Working'], ['idle', 'Idle'], ['waiting', 'Waiting for you'], ['limit', 'Limit hit'], ['ended', 'Ended']]
 const SHORTCUTS: [string, string][] = [['⌘N', 'New chat'], ['⌘O', 'Add existing chat'], ['⌘⇧A', 'Auto-arrange'], ['⌘F', 'Filter chats (in a chat: find in the terminal)'], ['⌘\\', 'Split: show another chat beside this one'], ['⇧-click', 'Open a chat beside the last one you viewed'], ['← ↑ ↓ →', 'Select a chat'], ['Enter', 'Open the selected chat'], ['Tab', 'Next chat'], ['⌘1–9', 'Jump to chat 1–9 (hold ⌘ to see them)'], ['⌘,', 'Customize'], ['⌘⇧B', 'Back to board'], ['⌘0', 'Fit board to window'], ['Esc', 'Close bar / panel']]
@@ -127,6 +127,11 @@ export function createSettings(panel: HTMLElement, initial: Settings, onChange: 
         segmented('Style', [['straight', 'Straight'], ['curved', 'Curved']] as [string, string][], () => (s.curved ? 'curved' : 'straight'), (v) => { s = { ...s, curved: v === 'curved' } }),
         slider('Thickness', 'lineWidth', 1, 6, 0.5)),
       section('Status colours', ...STATES.map(([k, label]) => color(label, k))),
+      section('Window',
+        toggle('Launch at login', 'launchAtLogin'),
+        toggle('Keep window on top', 'alwaysOnTop'),
+        slider('Window opacity', 'opacity', 50, 100, 5, '%'),
+        toggle('Show / hide from anywhere (⌃⌥B)', 'hotkey')),
       section('Other',
         toggle('Notify me when a chat needs me', 'notifications'),
         toggle('Sound with that notification', 'waitingSound'),

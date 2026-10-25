@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Notification, powerSaveBlocker, screen, session, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Notification, powerSaveBlocker, screen, session, shell } from 'electron'
 import { execFile } from 'node:child_process'
 import { accessSync, constants, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
@@ -9,6 +9,7 @@ import path from 'node:path'
 import * as pty from 'node-pty'
 import { Terminal } from '@xterm/headless'
 import { encodeCwd, scanSessions, type SessionInfo } from './scanner.mts'
+import { HOTKEY, winPrefs } from './winprefs.mts'
 import { pushRemoved, sanitizeRemoved, takeRestorable, type Removed } from './removed.mts'
 import { EDITORS, installedEditors } from './editors.mts'
 import { staleImages } from './pasteimg.mts'
@@ -468,7 +469,23 @@ ipcMain.handle('listFonts', () => {
   }
   return out
 })
+// Window and system settings. Launch at login only means something for the packaged app (unpackaged, it would register Electron itself).
+let wprefs = winPrefs(null)
+function toggleWindow() {
+  if (!win) return
+  if (win.isVisible() && win.isFocused()) app.hide()
+  else { app.show(); win.show(); win.focus() }
+}
+function applyWindowPrefs() {
+  if (win && !win.isDestroyed()) { win.setAlwaysOnTop(wprefs.alwaysOnTop); win.setOpacity(wprefs.opacity) }
+  if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: wprefs.launchAtLogin })
+  globalShortcut.unregister(HOTKEY)
+  if (wprefs.hotkey && !globalShortcut.register(HOTKEY, toggleWindow)) log(`global shortcut ${HOTKEY} is taken by another app`)
+}
+
 function applySettings(settings: unknown) {
+  wprefs = winPrefs(settings)
+  applyWindowPrefs()
   const o = settings as { stallMinutes?: number; finishNotify?: boolean; waitingSound?: boolean; quietHours?: boolean; quietStart?: number; quietEnd?: number; autoResume?: boolean; notifications?: boolean; keepAwake?: string; quietLaunch?: boolean } | null
   notifyOn = o?.notifications !== false
   keepAwake = o?.keepAwake ?? 'off'
@@ -650,6 +667,7 @@ app.whenReady().then(async () => {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   })
   if (b.maximized) win.maximize()
+  applyWindowPrefs()
   let boundsTimer: NodeJS.Timeout | undefined
   const rememberBounds = () => {
     clearTimeout(boundsTimer)
@@ -675,6 +693,7 @@ app.whenReady().then(async () => {
   })
 })
 
+app.on('will-quit', () => globalShortcut.unregisterAll())
 app.on('before-quit', (e) => {
   if (confirmedQuit) return
   if (confirmQuit()) confirmedQuit = true

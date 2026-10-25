@@ -177,6 +177,8 @@ badge: the number of chats waiting, or `!` while a limit is hit. Nothing is show
 
 **Copy and select in a chat:** when Claude Code copies something (it does this with OSC 52 escape codes, which Terminal.app ignores), the text goes onto the macOS clipboard. Programs can only write to the clipboard, never read it; switch it off with *Let chats copy to the clipboard* in Customize. While Claude Code is using the mouse, hold **Shift** (or Option) and drag to select text instead, then ⌘C.
 
+**Window settings** (Customize → Window): *Launch at login* (only for the installed app; the dev build ignores it), *Keep window on top*, *Window opacity* (50–100%), and *Show / hide from anywhere (⌃⌥B)*, a global shortcut that is off by default. If another app already owns ⌃⌥B the shortcut isn't registered and the log says so.
+
 **More notification options** (Customize): *Also notify when a chat finishes* (off by default) shows the first line of Claude's last reply when a chat goes from working to idle, except for the chat you're looking at; the 🔔 on a card (hover it) mutes that one chat. *Sound with that notification* plays a sound for "needs you" notifications; with it off they are silent. *Quiet hours* silences every notification between two hours (the Dock badge still updates).
 
 **Keep Mac awake** (Customize → Off / When working / Always) stops the Mac from sleeping, so long chats aren't cut off. "When working" only holds it while a chat is producing output. It is off by default; the display may still sleep.

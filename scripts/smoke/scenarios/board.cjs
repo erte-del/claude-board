@@ -185,6 +185,23 @@ module.exports = async function (t) {
   t.check('turning finished notifications on is saved', (t.readJson('settings.json') || {}).finishNotify === true)
   await t.js(`document.querySelector('#settings .reset').click()`); await settle(500)
   t.check('Reset to defaults turns it off again', (t.readJson('settings.json') || {}).finishNotify === false)
+  // ---- window settings reach the real window
+  { const { globalShortcut } = require('electron')
+    const row = (label) => `[...document.querySelectorAll('#settings .row')].find(r=>r.textContent.startsWith(${JSON.stringify(label)}))`
+    const w = t.win
+    t.check('the window starts normal: not on top, fully opaque, no global shortcut', !w.isAlwaysOnTop() && w.getOpacity() === 1 && !globalShortcut.isRegistered('Control+Alt+B'))
+    await t.js(`${row('Keep window on top')}.querySelector('input').click()`); await settle(400)
+    t.check('"Keep window on top" puts the window above other apps', w.isAlwaysOnTop() && (t.readJson('settings.json') || {}).alwaysOnTop === true)
+    await t.js(`(()=>{const i=${row('Window opacity')}.querySelector('input'); i.value='70'; i.dispatchEvent(new Event('input',{bubbles:true}))})()`); await settle(400)
+    t.check('the opacity slider fades the window', Math.abs(w.getOpacity() - 0.7) < 0.02, String(w.getOpacity()))
+    await t.js(`${row('Show / hide from anywhere')}.querySelector('input').click()`); await settle(400)
+    t.check('the global shortcut is registered only while switched on', globalShortcut.isRegistered('Control+Alt+B'))
+    await t.js(`${row('Show / hide from anywhere')}.querySelector('input').click()`); await settle(400)
+    t.check('and released when switched off', !globalShortcut.isRegistered('Control+Alt+B'))
+    await t.js(`${row('Launch at login')}.querySelector('input').click()`); await settle(800)
+    t.check('"Launch at login" is saved (it only acts in the packaged app)', (t.readJson('settings.json') || {}).launchAtLogin === true)
+    await t.js(`document.querySelector('#settings .reset').click()`); await settle(500)
+    t.check('Reset to defaults puts the window back to normal', !w.isAlwaysOnTop() && w.getOpacity() === 1 && (t.readJson('settings.json') || {}).launchAtLogin === false) }
   await t.key('Comma', { meta: true, key: ',' }); await settle(400)
 
   // ---- terminal colour presets

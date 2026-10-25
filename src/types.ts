@@ -58,6 +58,10 @@ export type Settings = {
   grid: boolean // dotted board background
   motion: boolean // easing and animations
   termFont: number // chat view font size
+  launchAtLogin: boolean // start Claude Board when you log in (packaged app only)
+  alwaysOnTop: boolean // keep the window above other apps
+  opacity: number // window opacity in percent, 50–100
+  hotkey: boolean // ⌃⌥B shows / hides the app from anywhere
   osc52: boolean // let programs in a chat put text on the clipboard (OSC 52), as Claude Code does when you copy
   termTheme: string // colour preset for the chat terminal (see termthemes.mts)
   termFontFamily: string // chat view font (DEFAULT_TERM_FONT = Terminal.app's SF Mono)
@@ -84,6 +88,10 @@ export const defaultSettings: Settings = {
   grid: true,
   motion: true,
   termFont: 12,
+  launchAtLogin: false,
+  alwaysOnTop: false,
+  opacity: 100,
+  hotkey: false,
   osc52: true,
   termTheme: 'default',
   termFontFamily: 'Terminal (SF Mono)',
