@@ -206,7 +206,7 @@ badge: the number of chats waiting, or `!` while a limit is hit. Nothing is show
 Under the branch row each card shows **ctx 47%** with a small meter (it turns orange at 80% and red at 95%) and **~$1.23**.
 Context is the size of the chat's latest request against the model's window (1M for all four current models; unknown models
 show raw tokens). Cost is estimated from the transcript's token usage, sub-agents included. It is shown **only for models whose
-price was verified**: currently Sonnet 5.5, where the estimate matched Claude Code's own total to the cent on recent sessions
+price was verified**: currently Sonnet 5.5, where the estimate matched Claude Code's own total to the cent on recent sessions, and Haiku 5.5 (solved from three of Claude Code's own session totals; it has no price for 5-minute cache writes, which never showed up, so a Haiku message that used them shows `—`). Opus 5.5 and Fable 5.1 have no price: there was no Claude Code total on this machine to check them against
 (`src/pricing.mts` records how, and one wrinkle: the cache-read price there is half of the published table's). For other
 models the cost shows `—`; add a price to `PRICES` once you can verify it. Hover the row for exact numbers.
 

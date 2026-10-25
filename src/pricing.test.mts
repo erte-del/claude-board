@@ -9,6 +9,18 @@ test('messageCost: known model priced per token class, unknown model null', () =
   assert.equal(messageCost(null, u), null)
 })
 
+test('Haiku 5.5 reproduces Claude Code\'s own cost totals (lastModelUsage) for three real sessions', () => {
+  const close = (a: number | null, b: number) => assert.ok(a !== null && Math.abs(a - b) < 1e-9, `${a} vs ${b}`)
+  close(messageCost('claude-haiku-5-5', { in: 1171, out: 13, read: 0, write1h: 0, write5m: 0 }), 0.0001236)
+  close(messageCost('claude-haiku-5-5', { in: 1203, out: 27, read: 0, write1h: 0, write5m: 0 }), 0.0001338)
+  close(messageCost('claude-haiku-5-5', { in: 1192, out: 175, read: 28584, write1h: 48946, write5m: 0 }), 0.01028174)
+})
+
+test('a price with an unverified class gives no cost when that class is used', () => {
+  assert.equal(messageCost('claude-haiku-5-5', { in: 10, out: 10, read: 0, write1h: 0, write5m: 1 }), null) // 5-minute writes: never seen, never priced
+  assert.equal(messageCost('claude-fable-5-1', { in: 1, out: 1, read: 0, write1h: 0, write5m: 0 }), null)
+})
+
 test('contextOf counts everything the request had to read', () => {
   assert.equal(contextOf({ in: 2, out: 999, read: 466_611, write1h: 1_866, write5m: 0 }), 468_479)
 })
