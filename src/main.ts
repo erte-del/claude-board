@@ -141,7 +141,7 @@ const summary = (c: Chat): ChatInfo => {
   // A blocking dialog isn't in the transcript yet, so show what is on screen: that is what the user is being asked.
   const prompt = c.status === 'waiting' ? permissionPrompt(screenBottom(c, 30))?.question ?? null : null
   const feed = c.status === 'waiting' ? dialogText(c, prompt !== null) : t.feed
-  return { id: c.id, cwd: c.cwd, sessionId: c.sessionId, status: c.status, model: t.model ?? bannerModel(c), branch: t.branch ?? c.gitBranch, tps: t.tps, feed: c.endNote ?? feed, subagents: subagentsOf(c), ...usageOf(t, c.subs), limitResetAt: c.status === 'limit' ? limitResetAt : null, permMode: c.permMode, waitKind: c.waitKind, stalled: c.status === 'working' && isStalled({ status: c.status, workingSince: c.workingSince, lastGrowth: Math.max(c.tailer.lastGrowth, c.subs.lastGrowth()) }, Date.now(), stallMinutes), crashed: c.crashed, prompt, resumable: c.status === 'ended' && c.tailer.exists }
+  return { id: c.id, cwd: c.cwd, sessionId: c.sessionId, status: c.status, model: t.model ?? bannerModel(c), branch: t.branch ?? c.gitBranch, tps: t.tps, feed: c.endNote ?? feed, subagents: subagentsOf(c), ...usageOf(t, c.subs), limitResetAt: c.status === 'limit' ? limitResetAt : null, permMode: c.permMode, interrupted: c.status === 'idle' && t.interrupted, waitKind: c.waitKind, stalled: c.status === 'working' && isStalled({ status: c.status, workingSince: c.workingSince, lastGrowth: Math.max(c.tailer.lastGrowth, c.subs.lastGrowth()) }, Date.now(), stallMinutes), crashed: c.crashed, prompt, resumable: c.status === 'ended' && c.tailer.exists }
 }
 
 // A running sub-agent is working by definition; it is only "waiting" when the parent is blocked on a dialog and this one has a pending tool.
@@ -166,7 +166,7 @@ function usageOf(t: Tailer['state'], subs: SubagentWatcher) {
 
 const dormantInfo = (d: Dormant): ChatInfo => {
   const t = d.tailer.state
-  return { id: d.id, cwd: d.cwd, sessionId: d.sessionId, status: 'ended', model: t.model, branch: t.branch, tps: t.tps, feed: t.feed.slice(-4), subagents: [], ...usageOf(t, d.subs), limitResetAt: null, permMode: null, waitKind: null, stalled: false, crashed: false, prompt: null, resumable: true }
+  return { id: d.id, cwd: d.cwd, sessionId: d.sessionId, status: 'ended', model: t.model, branch: t.branch, tps: t.tps, feed: t.feed.slice(-4), subagents: [], ...usageOf(t, d.subs), limitResetAt: null, permMode: null, interrupted: false, waitKind: null, stalled: false, crashed: false, prompt: null, resumable: true }
 }
 const allInfos = () => [...chats.values()].map(summary).concat([...dormant.values()].map(dormantInfo))
 const notifyChanged = () => {

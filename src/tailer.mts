@@ -8,6 +8,12 @@ type Entry = Record<string, any>
 const FEED_MAX = 12
 const toolArg = (i: Entry = {}) => String(i.command ?? i.file_path ?? i.pattern ?? i.url ?? i.description ?? '').replace(/\s+/g, ' ').slice(0, 80)
 
+/** Claude Code records Esc / Ctrl+C as a user entry whose text is "[Request interrupted by user]" (or "… for tool use" when a tool was refused). */
+export const isInterruptMarker = (content: unknown): boolean => {
+  const texts = Array.isArray(content) ? content.map((b) => (b && b.type === 'text' ? b.text : null)) : [content]
+  return texts.some((x) => typeof x === 'string' && x.startsWith('[Request interrupted by user'))
+}
+
 /** What a card shows, folded out of a session's transcript entries one at a time. */
 export class TranscriptState {
   model: string | null = null
@@ -15,6 +21,7 @@ export class TranscriptState {
   tps: number | null = null
   feed: string[] = []
   pending = new Set<string>() // tool_use ids with no tool_result yet: Claude is running a tool or waiting for approval
+  interrupted = false // the newest thing in the transcript is the user stopping the turn
   lastReply: string | null = null // the newest assistant text, in full (the card feed clips it)
   limit: string | null = null // set while the newest assistant entry is a rate-limit notice
   limitResetAt: number | null = null // when that limit lifts (epoch ms), read from the notice; null if it gave no time
@@ -60,11 +67,13 @@ export class TranscriptState {
 
     if (e.type === 'user') {
       const c = e.message?.content
+      if (!e.isMeta) this.interrupted = isInterruptMarker(c)
       if (Array.isArray(c)) for (const b of c) if (b?.type === 'tool_result') this.pending.delete(b.tool_use_id)
       if (!e.isMeta && !Number.isNaN(ts)) this.prevTs = ts
     } else if (e.type === 'assistant') {
       const m = e.message ?? {}
       const blocks: Entry[] = Array.isArray(m.content) ? m.content : []
+      this.interrupted = false
       if (e.error) {
         const text = blocks.map((b) => b?.text ?? '').join(' ').trim() || String(e.error)
         if (e.error === 'rate_limit') {

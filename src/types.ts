@@ -17,6 +17,7 @@ export type ChatInfo = {
   contextTokens: number | null // size of the latest request (what's in the window now)
   contextWindow: number | null // window of that model, if known
   costUSD: number | null // estimated spend, only for models with a verified price
+  interrupted: boolean // idle because the user stopped the turn (Esc / Ctrl+C), not because it finished
   stalled: boolean // working for a long time with nothing new in the transcript: a hint, never a colour change
   waitKind: WaitKind | null // while waiting: a tool permission, a question, or the trust dialog (null = unknown, e.g. a tool call in flight)
   crashed: boolean // ended with an error exit (not killed by the user): the card offers Restart

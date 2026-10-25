@@ -180,3 +180,20 @@ test('lastReply is the newest assistant text in full, not clipped like the feed'
   assert.equal(s.lastReply, long)
   assert.ok(s.feed[1].length < long.length)
 })
+
+test('interrupted: the user stopping a turn is the newest thing until anything else happens', () => {
+  const s = new TranscriptState()
+  const user = (text: string) => ({ type: 'user', timestamp: '2026-01-01T00:00:00Z', message: { role: 'user', content: [{ type: 'text', text }] } })
+  s.apply({ type: 'assistant', timestamp: '2026-01-01T00:00:00Z', message: { id: 'm1', content: [{ type: 'text', text: 'working on it' }] } })
+  assert.equal(s.interrupted, false)
+  s.apply(user('[Request interrupted by user]'))
+  assert.equal(s.interrupted, true)
+  s.apply(user('carry on'))
+  assert.equal(s.interrupted, false)
+  s.apply(user('[Request interrupted by user for tool use]')) // a refused tool counts too
+  assert.equal(s.interrupted, true)
+  s.apply({ type: 'assistant', timestamp: '2026-01-01T00:00:05Z', message: { id: 'm2', content: [{ type: 'text', text: 'ok' }] } })
+  assert.equal(s.interrupted, false)
+  s.apply({ ...user('[Request interrupted by user]'), message: { role: 'user', content: '[Request interrupted by user]' } }) // plain-string content too
+  assert.equal(s.interrupted, true)
+})

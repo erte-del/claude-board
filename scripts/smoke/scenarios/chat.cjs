@@ -360,4 +360,19 @@ module.exports = async function (t) {
     t.check('with the setting at 0 it never flags', (await info(w)).stalled === false)
     await t.waitFor(async () => (await info(w)).status === 'idle', { timeout: 10000 })
     await t.js(`api.saveSettings(${JSON.stringify(saved)})`) }
+
+  // ---- interrupted: the user stopped the turn (a transcript marker), as opposed to it finishing
+  { const w = await t.newChat(A)
+    await t.waitFor(async () => (await info(w)).status === 'idle', { timeout: 8000 })
+    const sid = (await info(w)).sessionId
+    const tag = () => t.js(`(()=>{const c=document.querySelector('.card[data-sid="${sid}"]'); return [c.querySelector('.tps').textContent, c.classList.contains('s-idle')]})()`)
+    await t.say(w, 'hello')
+    await t.waitFor(async () => (await info(w)).feed.some((f) => f.includes('echo: hello')), { timeout: 8000 })
+    t.check('a chat that finished normally is not marked interrupted', (await info(w)).interrupted === false)
+    await t.say(w, 'interrupt')
+    t.check('a turn the user stopped is marked interrupted once idle', !!(await t.waitFor(async () => { const c = await info(w); return c.status === 'idle' && c.interrupted === true }, { timeout: 8000 })))
+    t.check('the card says "interrupted" and keeps its idle colour', !!(await t.waitFor(async () => JSON.stringify(await tag()) === '["interrupted",true]', { timeout: 3000 })), JSON.stringify(await tag()))
+    await t.say(w, 'carry on')
+    t.check('the mark goes away with the next message', !!(await t.waitFor(async () => { const c = await info(w); return c.interrupted === false && c.feed.some((f) => f.includes('echo: carry on')) }, { timeout: 8000 })))
+  }
 }

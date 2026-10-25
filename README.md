@@ -171,6 +171,8 @@ badge: the number of chats waiting, or `!` while a limit is hit. Nothing is show
 
 **Stalled?** A chat that looks busy (green) but has written nothing new to its transcript, or its sub-agents', for 10 minutes shows `stalled?` where tokens/s normally are. It is only a hint (a long build looks the same) and never changes the colour. Change the time, or set 0 to turn it off, in Customize.
 
+**Interrupted:** when you stop a turn with Esc or Ctrl+C (or refuse a tool), Claude Code writes a marker into the transcript; the idle card then says `interrupted` instead of `— t/s` until the next message, so you can tell "I stopped it" from "it finished". The colour stays idle.
+
 **More notification options** (Customize): *Also notify when a chat finishes* (off by default) shows the first line of Claude's last reply when a chat goes from working to idle, except for the chat you're looking at; the 🔔 on a card (hover it) mutes that one chat. *Sound with that notification* plays a sound for "needs you" notifications; with it off they are silent. *Quiet hours* silences every notification between two hours (the Dock badge still updates).
 
 **Keep Mac awake** (Customize → Off / When working / Always) stops the Mac from sleeping, so long chats aren't cut off. "When working" only holds it while a chat is producing output. It is off by default; the display may still sleep.
