@@ -4,6 +4,7 @@ import type { ChatInfo, Layout, Settings } from './types'
 
 const api = {
   pasteImage: (): Promise<string | null> => ipcRenderer.invoke('pasteImage'), // saves the clipboard's image, returns its path
+  copyText: (text: string): Promise<void> => ipcRenderer.invoke('copyText', text), // for OSC 52 copy requests from a chat
   editors: (): Promise<{ id: string; label: string }[]> => ipcRenderer.invoke('editors'),
   openFolder: (sessionId: string, how: string): Promise<{ ok: true } | { ok: false; error: string }> => ipcRenderer.invoke('openFolder', sessionId, how), // how: 'finder', 'copy' (its folder) or an editor id
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke('pickFolder'),

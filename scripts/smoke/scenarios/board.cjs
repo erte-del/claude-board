@@ -180,6 +180,7 @@ module.exports = async function (t) {
   await t.key('Comma', { meta: true, key: ',' }); await settle(400)
   const sw = (label) => t.js(`(()=>{const r=[...document.querySelectorAll('#settings .row')].find(r=>r.textContent.startsWith(${JSON.stringify(label)})); return r.querySelector('input').checked})()`)
   t.check('"also notify when a chat finishes", the sound and quiet hours all start off', !(await sw('Also notify')) && !(await sw('Sound with')) && !(await sw('Quiet hours')))
+  t.check('letting chats copy to the clipboard (OSC 52) starts on', await sw('Let chats copy'))
   await t.js(`[...document.querySelectorAll('#settings .row')].find(r=>r.textContent.startsWith('Also notify')).querySelector('input').click()`); await settle(500)
   t.check('turning finished notifications on is saved', (t.readJson('settings.json') || {}).finishNotify === true)
   await t.js(`document.querySelector('#settings .reset').click()`); await settle(500)

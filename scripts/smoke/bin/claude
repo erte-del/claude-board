@@ -12,6 +12,8 @@
 //   quiet        report $BROWSER and the first PATH folder (the no-focus shim)
 //   crashloop    like crash, and every later --resume crashes at once too (for the auto-restart limit)
 //   interrupt    record that the user interrupted the turn (as Esc does)
+//   osc52        copy a sentence to the clipboard the way Claude Code does (OSC 52)
+//   mouse        turn on mouse reporting (as Claude Code's fullscreen mode does) and print some text
 //   exit         exit normally
 //   (`--resume A --fork-session --session-id B` starts B with a copy of A's history)
 // An opening prompt (the argument after `--`) is submitted at start-up, as if typed.
@@ -73,6 +75,8 @@ function submit(text) {
   if (cmd === 'mode' && STATUS[arg]) { permMode = arg; return reply(`mode: ${arg}`) }
   if (cmd === 'quiet') return reply(`quiet: ${process.env.BROWSER} first=${process.env.PATH.split(':')[0]}`)
   if (cmd === 'interrupt') { append({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user]' }] } }); write('⎿ Interrupted · What should Claude do instead?'); mode = 'input'; prompt(); return }
+  if (cmd === 'osc52') { write(`\x1b]52;c;${Buffer.from('copied by the stub — ünï ✓').toString('base64')}\x07`); return reply('sent a copy request') }
+  if (cmd === 'mouse') { write('\x1b[?1000h\x1b[?1002h\x1b[?1006h'); return reply('mouse reporting is on: SELECT THIS TEXT') }
   if (cmd === 'exit') process.exit(0)
   if (cmd === 'crashloop') fs.writeFileSync(file + '.crashy', '')
   if (cmd === 'crash' || cmd === 'crashloop') { process.stderr.write('fatal: stub crash\n'); process.exit(1) }

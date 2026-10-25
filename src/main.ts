@@ -506,6 +506,8 @@ ipcMain.handle('pasteImage', async () => {
 })
 // Card menu: show a chat's folder in Finder or open it in an editor. The folder is looked up from the chat; the page only names the chat and a fixed action.
 // CB_OPEN lets the smoke tests substitute a recorder for /usr/bin/open.
+// A program in a chat asked to copy (OSC 52). Text only, capped; the renderer has already checked the setting.
+ipcMain.handle('copyText', async (_e, text: unknown) => { if (typeof text === 'string' && text.length <= 1_000_000) await clipboard.writeText(text) })
 ipcMain.handle('editors', () => installedEditors(existsSync, os.homedir()).map(({ id, label }) => ({ id, label })))
 ipcMain.handle('openFolder', async (_e, sessionId: string, how: string): Promise<{ ok: true } | { ok: false; error: string }> => {
   const cwd = [...chats.values()].find((c) => c.sessionId === sessionId)?.cwd ?? dormant.get(sessionId)?.cwd

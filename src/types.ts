@@ -58,6 +58,7 @@ export type Settings = {
   grid: boolean // dotted board background
   motion: boolean // easing and animations
   termFont: number // chat view font size
+  osc52: boolean // let programs in a chat put text on the clipboard (OSC 52), as Claude Code does when you copy
   termTheme: string // colour preset for the chat terminal (see termthemes.mts)
   termFontFamily: string // chat view font (DEFAULT_TERM_FONT = Terminal.app's SF Mono)
   notifications: boolean // macOS notification + Dock badge when a chat needs you
@@ -83,6 +84,7 @@ export const defaultSettings: Settings = {
   grid: true,
   motion: true,
   termFont: 12,
+  osc52: true,
   termTheme: 'default',
   termFontFamily: 'Terminal (SF Mono)',
   notifications: true,

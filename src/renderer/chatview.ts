@@ -6,6 +6,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import type { Api } from '../preload'
 import { shellEscapePath } from '../shellpath.mts'
+import { parseOsc52 } from '../osc52.mts'
 import { termTheme } from '../termthemes.mts'
 import { DEFAULT_TERM_FONT, type ChatInfo, type Settings } from '../types'
 
@@ -87,6 +88,26 @@ export function createChatView(d: Deps) {
   document.getElementById('find-prev')!.onclick = () => runFind('prev')
   document.getElementById('find-close')!.onclick = closeFind
 
+  // ---- Shift-drag selects even while Claude Code has the mouse. xterm.js only lets Option force that on a Mac, so while a program is
+  // using the mouse, a Shift press / drag / release inside a terminal is passed on as the same event with Option instead of Shift.
+  const asOption = (e: MouseEvent) => new MouseEvent(e.type, { bubbles: true, cancelable: true, composed: true, view: window, detail: e.detail, screenX: e.screenX, screenY: e.screenY, clientX: e.clientX, clientY: e.clientY, button: e.button, buttons: e.buttons, altKey: true, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: false })
+  let shiftDrag: Pane | null = null
+  const forward = (e: MouseEvent) => {
+    if (!shiftDrag || e.altKey || !e.isTrusted) return
+    e.stopImmediatePropagation()
+    ;(e.target as Element).dispatchEvent(asOption(e))
+    if (e.type === 'mouseup') { shiftDrag.term.focus(); shiftDrag = null } // focus back in the terminal, so ⌘C copies the selection
+  }
+  window.addEventListener('mousedown', (e) => {
+    if (!e.shiftKey || e.altKey || e.button !== 0 || !e.isTrusted) return
+    const p = panes.find((x) => x.el.contains(e.target as Node))
+    if (!p || p.term.modes.mouseTrackingMode === 'none') return // nothing is using the mouse: xterm's own Shift-click (extend) applies
+    shiftDrag = p
+    forward(e)
+  }, true)
+  window.addEventListener('mousemove', forward, true)
+  window.addEventListener('mouseup', forward, true)
+
   // ---- panes
   function termOptions(s: Settings) {
     return { fontFamily: fontCss(s.termFontFamily), fontSize: s.termFont }
@@ -118,7 +139,7 @@ export function createChatView(d: Deps) {
     el.append(head, body)
     d.wrap.append(el)
 
-    const term = new Terminal({ ...termOptions(s), cursorBlink: true, macOptionIsMeta: true, allowProposedApi: true, scrollback: 5000, theme: termTheme(s.termTheme) })
+    const term = new Terminal({ ...termOptions(s), cursorBlink: true, macOptionIsMeta: true, macOptionClickForcesSelection: true, allowProposedApi: true, scrollback: 5000, theme: termTheme(s.termTheme) })
     const fit = new FitAddon()
     const search = new SearchAddon()
     term.loadAddon(fit)
@@ -128,6 +149,13 @@ export function createChatView(d: Deps) {
     term.unicode.activeVersion = '11'
     term.open(host)
     try { term.loadAddon(new WebglAddon()) } catch { /* falls back to DOM renderer */ }
+
+    // OSC 52: Claude Code copies by asking the terminal to (Terminal.app ignores that, xterm.js needs a handler). Write only, never read.
+    term.parser.registerOscHandler(52, (data) => {
+      const text = d.settings().osc52 ? parseOsc52(data) : null
+      if (text !== null) void d.api.copyText(text)
+      return true
+    })
 
     // Shift+Enter -> ESC+CR (Claude Code's "newline"). The app's own shortcuts are not the terminal's.
     term.attachCustomKeyEventHandler((e) => {

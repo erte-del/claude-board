@@ -175,6 +175,8 @@ badge: the number of chats waiting, or `!` while a limit is hit. Nothing is show
 
 **Terminal colours:** Customize → *Terminal colours* has Default, Dracula, Solarized Dark, One Dark, GitHub Dark, macOS Dark (Pro) and macOS Light (Basic). It recolours the chat terminal (background, text, cursor, selection and the 16 ANSI colours) and the pane around it, live. The palettes are typed in by hand from the published themes, so a shade may differ slightly from the original; importing an iTerm `.itermcolors` file isn't supported yet.
 
+**Copy and select in a chat:** when Claude Code copies something (it does this with OSC 52 escape codes, which Terminal.app ignores), the text goes onto the macOS clipboard. Programs can only write to the clipboard, never read it; switch it off with *Let chats copy to the clipboard* in Customize. While Claude Code is using the mouse, hold **Shift** (or Option) and drag to select text instead, then ⌘C.
+
 **More notification options** (Customize): *Also notify when a chat finishes* (off by default) shows the first line of Claude's last reply when a chat goes from working to idle, except for the chat you're looking at; the 🔔 on a card (hover it) mutes that one chat. *Sound with that notification* plays a sound for "needs you" notifications; with it off they are silent. *Quiet hours* silences every notification between two hours (the Dock badge still updates).
 
 **Keep Mac awake** (Customize → Off / When working / Always) stops the Mac from sleeping, so long chats aren't cut off. "When working" only holds it while a chat is producing output. It is off by default; the display may still sleep.

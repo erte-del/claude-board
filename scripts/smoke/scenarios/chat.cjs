@@ -391,4 +391,43 @@ module.exports = async function (t) {
     await t.key('Comma', { meta: true, key: ',' }); await t.sleep(400)
     await pickTheme('Default'); await t.sleep(300)
     await t.key('Comma', { meta: true, key: ',' }); await t.sleep(400) }
+
+  // ---- copy & select: OSC 52 reaches the macOS clipboard, and Shift-drag selects while the program has the mouse
+  { const { clipboard } = require('electron')
+    await t.key('KeyB', { meta: true, shift: true, key: 'B' }); await t.sleep(400)
+    const fresh = await t.newChat(A) // a clean input line: the earlier paste tests left text on the first chat's
+    await t.waitFor(async () => (await info(fresh)).status === 'idle', { timeout: 8000 })
+    const live = await info(fresh)
+    await t.click(`.card[data-sid="${live.sessionId}"]`); await t.waitFor(() => t.js(`!document.getElementById('chat').hidden`)); await t.sleep(900)
+    await t.say(live.id, 'osc52')
+    t.check('a copy request from the program (OSC 52) puts the text on the macOS clipboard, unicode intact', !!(await t.waitFor(async () => (await clipboard.readText()) === 'copied by the stub — ünï ✓', { timeout: 5000 })), JSON.stringify([await clipboard.readText(), (await info(live.id)).status, (await info(live.id)).feed.slice(-3)]))
+    await t.say(live.id, 'mouse')
+    await t.waitFor(async () => (await info(live.id)).feed.some((f) => f.includes('mouse reporting is on')), { timeout: 5000 })
+    await t.sleep(500)
+    const dbg = t.wc.debugger
+    if (!dbg.isAttached()) dbg.attach('1.3')
+    const rect = await t.js(`(()=>{const r=document.querySelector('.xterm-screen').getBoundingClientRect(); return {x:r.left,y:r.top,w:r.width,h:r.height}})()`)
+    const mouse = (type, x, y, mod, extra = {}) => dbg.sendCommand('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1, modifiers: mod, ...extra })
+    const drag = async (mod) => {
+      const x0 = rect.x + 4, y0 = rect.y + 4, x1 = rect.x + rect.w - 8, y1 = rect.y + rect.h - 8
+      await mouse('mousePressed', x0, y0, mod); await t.sleep(80)
+      for (let i = 1; i <= 8; i++) { await mouse('mouseMoved', x0 + ((x1 - x0) * i) / 8, y0 + ((y1 - y0) * i) / 8, mod, { button: 'left' }); await t.sleep(40) }
+      await mouse('mouseReleased', x1, y1, mod); await t.sleep(300)
+    }
+    const reports = () => t.spy.writes.map((w) => w.data).join('').match(/\x1b\[<\d+;\d+;\d+[Mm]/g) || []
+    t.spy.writes.length = 0
+    await drag(0)
+    t.check('control: a plain drag is reported to the program as mouse events', reports().length > 2, String(reports().length))
+    await clipboard.writeText('before')
+    t.spy.writes.length = 0
+    await dbg.sendCommand('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Shift', code: 'ShiftLeft', windowsVirtualKeyCode: 16, modifiers: 8 }); await t.sleep(150)
+    await drag(8)
+    t.check('Shift-drag sends nothing to the program', reports().length === 0, String(reports().length))
+    const areaText = await t.js(`document.querySelector('.xterm-helper-textarea').value`)
+    t.wc.copy(); await t.sleep(400)
+    t.check('and selects the text: ⌘C copies it to the clipboard', (await clipboard.readText()).includes('SELECT THIS TEXT'), JSON.stringify([(await clipboard.readText()).slice(0, 60), String(areaText).slice(0, 60), await t.js(`document.activeElement && document.activeElement.className`)]))
+    await dbg.sendCommand('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Shift', code: 'ShiftLeft', windowsVirtualKeyCode: 16, modifiers: 0 }); await t.sleep(200)
+    t.spy.writes.length = 0
+    await drag(0)
+    t.check('after Shift is released the program gets the mouse again', reports().length > 2, String(reports().length)) }
 }
