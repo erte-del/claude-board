@@ -9,6 +9,7 @@ import path from 'node:path'
 import * as pty from 'node-pty'
 import { Terminal } from '@xterm/headless'
 import { encodeCwd, scanSessions, type SessionInfo } from './scanner.mts'
+import { sanitizeLayout } from './layoutio.mts'
 import { HOTKEY, winPrefs } from './winprefs.mts'
 import { pushRemoved, sanitizeRemoved, takeRestorable, type Removed } from './removed.mts'
 import { EDITORS, installedEditors } from './editors.mts'
@@ -453,6 +454,27 @@ ipcMain.handle('saveLayout', (_e, layout: Layout) => {
   titles = layout.titles ?? {}
   muted = layout.muted ?? {}
   return writeJson('board-layout.json', layout)
+})
+// Export / import the board layout (positions, names, notes, pins, folds) as a JSON file the user picks. Imports are re-validated field by field.
+ipcMain.handle('exportLayout', async (_e, layout: unknown): Promise<{ ok: true; path: string } | { ok: false; error?: string }> => {
+  const clean = sanitizeLayout(layout)
+  if (!clean) return { ok: false, error: 'Nothing to export yet.' }
+  const r = await dialog.showSaveDialog(win!, { title: 'Export board layout', defaultPath: 'claude-board-layout.json', filters: [{ name: 'JSON', extensions: ['json'] }] })
+  if (r.canceled || !r.filePath) return { ok: false }
+  try { await writeFile(r.filePath, JSON.stringify(clean, null, 2)); return { ok: true, path: r.filePath } } catch (e) { return { ok: false, error: (e as Error).message } }
+})
+ipcMain.handle('importLayout', async (): Promise<{ ok: true; layout: Layout } | { ok: false; error?: string }> => {
+  const r = await dialog.showOpenDialog(win!, { title: 'Import board layout', properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] })
+  if (r.canceled || !r.filePaths[0]) return { ok: false }
+  try {
+    if (statSync(r.filePaths[0]).size > 5_000_000) return { ok: false, error: 'That file is too big to be a layout.' }
+    const layout = sanitizeLayout(JSON.parse(readFileSync(r.filePaths[0], 'utf8')))
+    if (!layout) return { ok: false, error: "That file isn't a Claude Board layout." }
+    titles = layout.titles
+    muted = layout.muted ?? {}
+    await writeJson('board-layout.json', layout)
+    return { ok: true, layout }
+  } catch (e) { return { ok: false, error: `Couldn't read that file: ${(e as Error).message}` } }
 })
 // Font files the user has installed (Chromium can't use ~/Library/Fonts by name, but it can load the files).
 ipcMain.handle('listFonts', () => {

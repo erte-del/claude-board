@@ -8,6 +8,9 @@ const scenarioName = process.env.SMOKE_SCENARIO
 app.setPath('userData', process.env.SMOKE_DATA)
 let quitAnswer = 0 // what the "chats are still running, quit?" dialog says: 0 = Quit, 1 = Cancel
 dialog.showMessageBoxSync = () => quitAnswer
+const picked = { save: null, open: null } // file the next Export / Import dialog "chooses" (null = cancelled)
+dialog.showSaveDialog = async () => ({ canceled: !picked.save, filePath: picked.save })
+dialog.showOpenDialog = async () => ({ canceled: !picked.open, filePaths: picked.open ? [picked.open] : [] })
 
 const spy = { writes: [], cols: {} } // what the renderer sent to ptys, and each pty's reported width
 ipcMain.on('pty:write', (_e, id, data) => spy.writes.push({ id, data }))
@@ -23,6 +26,7 @@ const t = {
   home: process.env.HOME,
   data: process.env.SMOKE_DATA,
   spy,
+  picked,
   sleep,
   get win() { return BrowserWindow.getAllWindows()[0] },
   get wc() { return BrowserWindow.getAllWindows()[0].webContents },

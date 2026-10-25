@@ -185,6 +185,30 @@ module.exports = async function (t) {
   t.check('turning finished notifications on is saved', (t.readJson('settings.json') || {}).finishNotify === true)
   await t.js(`document.querySelector('#settings .reset').click()`); await settle(500)
   t.check('Reset to defaults turns it off again', (t.readJson('settings.json') || {}).finishNotify === false)
+  // ---- export / import the board layout (the file dialogs are stood in for by the harness)
+  { const fs = require('fs'), path = require('path')
+    const btn = (label) => t.js(`[...document.querySelectorAll('#settings button')].find(b=>b.textContent===${JSON.stringify(label)}).click()`)
+    const toast = () => t.js(`document.getElementById('toast').textContent`)
+    const out = path.join(t.data, 'exported-layout.json'), edited = path.join(t.data, 'edited-layout.json'), junk = path.join(t.data, 'junk.json')
+    const before = t.readJson('board-layout.json') || {}
+    t.picked.save = out; await btn('Export…'); await settle(700)
+    const exported = JSON.parse(fs.readFileSync(out, 'utf8'))
+    t.check('Export writes the layout (names, positions, collapsed folders) to the chosen file', exported.titles?.s2 === 'Payments refactor' && Object.keys(exported.cards || {}).length > 0 && /Layout exported/.test(await toast()), JSON.stringify(exported).slice(0, 120))
+    t.picked.save = null; await btn('Export…'); await settle(400)
+    t.check('cancelling the dialog does nothing', JSON.stringify(JSON.parse(fs.readFileSync(out, 'utf8'))) === JSON.stringify(exported))
+    fs.writeFileSync(edited, JSON.stringify({ ...exported, titles: { ...exported.titles, s2: 'Imported name' }, evil: 'x', pinned: { s4: true, s5: 'no' } }))
+    t.picked.open = edited; await btn('Import…'); await settle(900)
+    const after = t.readJson('board-layout.json') || {}
+    t.check('Import replaces the layout: the card shows the imported name, saved to disk', (await t.text('.card .name', 1)) === 'Imported name' && after.titles?.s2 === 'Imported name', String(await t.text('.card .name', 1)))
+    t.check('only known fields of the right shape are kept', after.evil === undefined && JSON.stringify(after.pinned) === '{"s4":true}', JSON.stringify(after.pinned))
+    t.check('and it says so', /Layout imported/.test(await toast()))
+    fs.writeFileSync(junk, JSON.stringify({ hello: 'world' }))
+    t.picked.open = junk; await btn('Import…'); await settle(600)
+    t.check('a file that is not a layout is refused and changes nothing', /isn't a Claude Board layout/.test(await toast()) && (t.readJson('board-layout.json') || {}).titles?.s2 === 'Imported name')
+    t.picked.open = null
+    // put the first layout back so later checks see what they expect
+    fs.writeFileSync(edited, JSON.stringify(before)); t.picked.open = edited; await btn('Import…'); await settle(700); t.picked.open = null }
+
   // ---- window settings reach the real window
   { const { globalShortcut } = require('electron')
     const row = (label) => `[...document.querySelectorAll('#settings .row')].find(r=>r.textContent.startsWith(${JSON.stringify(label)}))`

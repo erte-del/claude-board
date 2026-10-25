@@ -187,7 +187,10 @@ function onSettings(s: Settings, persist = true) {
   clearTimeout(saveTimer)
   saveTimer = window.setTimeout(() => void api.saveSettings(s), 300)
 }
-const drawer = createSettings($('settings'), settings, onSettings)
+const drawer = createSettings($('settings'), settings, onSettings, {
+  export: () => void api.loadLayout().then((l) => api.exportLayout(l)).then((r) => { if (r.ok) toast('Layout exported'); else if (r.error) toast(r.error) }),
+  import: () => void api.importLayout().then((r) => { if (r.ok) { board.setLayout(r.layout); toast('Layout imported') } else if (r.error) toast(r.error) }),
+})
 fontsReady.then((list) => drawer.setFonts(list)).catch(() => {})
 // ---- filter: type to dim the chats that don't match; Enter jumps to the next match; the toggle hides ended chats
 const filter = $<HTMLInputElement>('filter'), filterCount = $('filter-count'), hideEnded = $('hide-ended')

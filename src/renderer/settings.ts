@@ -33,7 +33,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = '') 
   return e
 }
 
-export function createSettings(panel: HTMLElement, initial: Settings, onChange: (s: Settings) => void) {
+export function createSettings(panel: HTMLElement, initial: Settings, onChange: (s: Settings) => void, layoutActions: { export(): void; import(): void }) {
   let s = initial
   const emit = () => { applySettings(s); onChange(s) }
 
@@ -148,6 +148,18 @@ export function createSettings(panel: HTMLElement, initial: Settings, onChange: 
         fontSelect(),
         themeSelect(),
         slider('Terminal text', 'termFont', 10, 18, 1)),
+      section('Board layout',
+        (() => {
+          const r = el('div', 'row')
+          const ex = el('button', '', 'Export…'), im = el('button', '', 'Import…')
+          ex.type = im.type = 'button'
+          ex.title = 'Save card positions, names, notes and pins to a file'
+          im.title = 'Replace them with the ones in a file saved by Export'
+          ex.onclick = () => layoutActions.export()
+          im.onclick = () => layoutActions.import()
+          r.append(el('span', 'row-label', 'Positions, names, notes, pins'), ex, im)
+          return r
+        })()),
       section('Shortcuts', ...SHORTCUTS.map(([keys, what]) => {
         const r = el('div', 'row')
         r.append(el('span', 'row-label', what), el('kbd', '', keys))

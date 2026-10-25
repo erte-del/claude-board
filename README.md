@@ -179,6 +179,8 @@ badge: the number of chats waiting, or `!` while a limit is hit. Nothing is show
 
 **Window settings** (Customize → Window): *Launch at login* (only for the installed app; the dev build ignores it), *Keep window on top*, *Window opacity* (50–100%), and *Show / hide from anywhere (⌃⌥B)*, a global shortcut that is off by default. If another app already owns ⌃⌥B the shortcut isn't registered and the log says so.
 
+**Export / import the board layout** (Customize → Board layout): *Export…* saves card positions, names, notes, pins, mutes and folded folders to a JSON file; *Import…* replaces the current ones with a file's. Imports are checked field by field, so a damaged or foreign file is refused or its bad parts dropped. Cards are matched by chat id, so it restores a board on the same chats (for instance after a reinstall), not chats themselves.
+
 **More notification options** (Customize): *Also notify when a chat finishes* (off by default) shows the first line of Claude's last reply when a chat goes from working to idle, except for the chat you're looking at; the 🔔 on a card (hover it) mutes that one chat. *Sound with that notification* plays a sound for "needs you" notifications; with it off they are silent. *Quiet hours* silences every notification between two hours (the Dock badge still updates).
 
 **Keep Mac awake** (Customize → Off / When working / Always) stops the Mac from sleeping, so long chats aren't cut off. "When working" only holds it while a chat is producing output. It is off by default; the display may still sleep.
