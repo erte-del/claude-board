@@ -9,7 +9,7 @@ import path from 'node:path'
 import * as pty from 'node-pty'
 import { Terminal } from '@xterm/headless'
 import { encodeCwd, scanSessions, type SessionInfo } from './scanner.mts'
-import { resolveDir } from './paths.mts'
+import { openingArgs, resolveDir } from './paths.mts'
 import { sanitizeRegistry, type RegEntry } from './registry.mts'
 import { SubagentWatcher, Tailer } from './tailer.mts'
 import { modelFromScreen, permissionMode, permissionPrompt, waitingForUser, type PermMode } from './screen.mts'
@@ -214,10 +214,10 @@ function spawnChat(folder: string, args: string[], sessionId: string, resumed = 
 }
 
 // Choosing the session id up front means the card and its transcript match exactly; no guessing from files appearing.
-const newChat = (cwd: string): { ok: true; id: string } | { ok: false; error: string } => {
+const newChat = (cwd: string, prompt?: unknown): { ok: true; id: string } | { ok: false; error: string } => {
   try {
     const sessionId = randomUUID()
-    const id = spawnChat(cwd, ['--session-id', sessionId], sessionId)
+    const id = spawnChat(cwd, ['--session-id', sessionId, ...openingArgs(prompt)], sessionId)
     registry.push({ sessionId, cwd: chats.get(id)!.cwd }) // the resolved folder: that is where the transcript is filed
     void writeJson('chats.json', registry)
     return { ok: true, id }
@@ -338,7 +338,7 @@ ipcMain.handle('claudeStatus', async () => {
     }
   }
 })
-ipcMain.handle('newChat', async (_e, cwd: string) => { await envReady; return newChat(cwd) })
+ipcMain.handle('newChat', async (_e, cwd: string, prompt?: string) => { await envReady; return newChat(cwd, prompt) })
 ipcMain.handle('openChat', (_e, id: string) => {
   const c = chats.get(id)
   if (!c) return null

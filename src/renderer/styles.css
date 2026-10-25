@@ -201,7 +201,7 @@ button.toggle.on { background: var(--accent); border-color: transparent; color: 
 .popover.open { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition-delay: 0s; }
 .cmdrow { display: flex; align-items: center; gap: 10px; }
 .prompt { color: var(--accent); font: 13px var(--font-mono); }
-#cmd { flex: 1; background: transparent; border: 0; color: var(--fg); font: 13px var(--font-mono); padding: 6px 0; outline: none; }
+#cmd, #opening { flex: 1; background: transparent; border: 0; color: var(--fg); font: 13px var(--font-mono); padding: 6px 0; outline: none; }
 .cmdfoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); min-height: 34px; }
 #cmd-error { color: var(--c-limit); font-size: 12px; }
 

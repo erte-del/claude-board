@@ -20,3 +20,9 @@ export function resolveDir(input: string, home = os.homedir()): DirResult {
   // (/tmp, /var, a linked project) the app would otherwise look for the transcript under the wrong name and show nothing.
   return { ok: true, path: realpathSync(abs) }
 }
+
+/** openingArgs: argv for a first message. After `--` so a prompt like "-p" or "--help" is text, never a flag; no shell is involved. */
+export const openingArgs = (prompt: unknown): string[] => {
+  const p = typeof prompt === 'string' ? prompt.trim().slice(0, 10000) : ''
+  return p ? ['--', p] : []
+}

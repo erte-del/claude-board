@@ -208,4 +208,22 @@ module.exports = async function (t) {
   const q = await t.waitFor(async () => (await info(quiet)).feed.join('').match(/quiet: (\S+) first=(\S+)/), { timeout: 8000 })
   t.check('a chat gets the no-focus "open" shim as $BROWSER and first on PATH', !!q && q[1].endsWith('/quiet-bin/open') && q[2].endsWith('/quiet-bin'), q && q[0])
   t.check('the shim opens in the background', fs.readFileSync(q[1], 'utf8').includes('open -g "$@"') && (fs.statSync(q[1]).mode & 0o111) !== 0)
+
+  // ---- opening prompt: the second field of the new-chat bar, passed as an argument (after `--`), never through a shell
+  { const odd = '--help $(touch /tmp/should-not-exist) "q"'
+    const start = async (prompt) => {
+      const before = (await t.chats()).length
+      await t.key('KeyN', { meta: true, key: 'n' }); await t.sleep(400)
+      await t.js(`(()=>{document.getElementById('cmd').value=${JSON.stringify(A)}; document.getElementById('opening').value=${JSON.stringify(prompt)}; document.getElementById('newchat').requestSubmit()})()`)
+      await t.waitFor(async () => (await t.chats()).length === before + 1, { timeout: 8000 })
+      return (await t.chats()).slice(-1)[0]
+    }
+    const withPrompt = await start('say hi to the board')
+    t.check('an opening prompt is the first message of the new chat', !!(await t.waitFor(async () => (await info(withPrompt.id)).feed.some((f) => f.includes('echo: say hi to the board')), { timeout: 8000 })), JSON.stringify((await info(withPrompt.id)).feed))
+    t.check('and the field is cleared for next time', (await t.js(`document.getElementById('opening').value`)) === '')
+    const tricky = await start(odd)
+    t.check('a prompt full of flags, quotes and $(…) arrives verbatim, unexecuted', !!(await t.waitFor(async () => (await info(tricky.id)).feed.some((f) => f.includes('echo: ' + odd)), { timeout: 8000 })) && !fs.existsSync('/tmp/should-not-exist'), JSON.stringify((await info(tricky.id)).feed))
+    const plain = await start('')
+    await t.sleep(1500)
+    t.check('without a prompt the chat just waits at its prompt', !(await info(plain.id)).feed.some((f) => f.includes('echo:'))) }
 }

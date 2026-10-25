@@ -102,9 +102,9 @@ function showError(message: string) {
 }
 
 // Starting a chat can fail (claude missing, bad folder, spawn error): say so in the new-chat bar instead of silently doing nothing.
-async function startChat(cwd: string) {
-  const r = await api.newChat(cwd)
-  if (r.ok) { closePopover(); return showChat(r.id) }
+async function startChat(cwd: string, prompt?: string) {
+  const r = await api.newChat(cwd, prompt)
+  if (r.ok) { opening.value = ''; closePopover(); return showChat(r.id) }
   showError(r.error)
 }
 
@@ -191,7 +191,7 @@ $('arrange').onclick = () => board.arrange()
 $('gear').onclick = () => { closePopover(); drawer.toggle() }
 
 // ---- new chat: a one-line "cd" bar, with a folder picker as the fallback
-const form = $('newchat'), cmd = $<HTMLInputElement>('cmd'), cmdError = $('cmd-error')
+const form = $('newchat'), cmd = $<HTMLInputElement>('cmd'), opening = $<HTMLInputElement>('opening'), cmdError = $('cmd-error')
 function closePopover() { form.classList.remove('open'); picker.classList.remove('open'); cmdError.textContent = '' }
 function togglePopover() {
   const open = !form.classList.contains('open')
@@ -261,11 +261,11 @@ form.onsubmit = async (e) => {
   const r = await api.resolveDir(cmd.value)
   if (!r.ok) { cmdError.textContent = r.error; return }
   cmd.value = ''
-  await startChat(r.path)
+  await startChat(r.path, opening.value)
 }
 $('browse').onclick = async () => {
   const cwd = await api.pickFolder()
-  if (cwd) await startChat(cwd)
+  if (cwd) await startChat(cwd, opening.value)
 }
 $('board').addEventListener('pointerdown', () => { closePopover(); drawer.close() })
 

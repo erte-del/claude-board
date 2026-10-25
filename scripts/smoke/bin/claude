@@ -9,6 +9,7 @@
 //   mode NAME    switch the permission mode shown on the status line (manual, auto, accept-edits, plan, bypass)
 //   quiet        report $BROWSER and the first PATH folder (the no-focus shim)
 //   exit         exit normally
+// An opening prompt (the argument after `--`) is submitted at start-up, as if typed.
 //   anything else: replies "echo: <text>"
 const fs = require('fs')
 const path = require('path')
@@ -124,3 +125,6 @@ process.stdin.on('data', (chunk) => {
     }
   }
 })
+
+const dd = args.indexOf('--')
+if (dd >= 0 && args[dd + 1] && !resumed) setTimeout(() => { write(args[dd + 1]); submit(args[dd + 1]) }, 150)

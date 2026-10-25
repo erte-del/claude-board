@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { resolveDir } from './paths.mts'
+import { openingArgs, resolveDir } from './paths.mts'
 
 const home = realpathSync(mkdtempSync(path.join(tmpdir(), 'home-'))) // macOS's temp dir is itself a symlink
 mkdirSync(path.join(home, 'proj'))
@@ -37,4 +37,11 @@ test('a symlinked folder resolves to its real path (that is where the chat\'s tr
   symlinkSync(path.join(home, 'proj'), path.join(home, 'link'))
   assert.deepEqual(resolveDir('cd link', home), ok(path.join(home, 'proj')))
   assert.deepEqual(resolveDir(path.join(home, 'link'), home), ok(path.join(home, 'proj')))
+})
+
+test('openingArgs puts a first message after `--` and ignores blanks and non-strings', () => {
+  assert.deepEqual(openingArgs('fix the bug'), ['--', 'fix the bug'])
+  assert.deepEqual(openingArgs('  --help $(rm -rf ~) "x"  '), ['--', '--help $(rm -rf ~) "x"']) // kept verbatim: no shell, no flags
+  assert.deepEqual([openingArgs(''), openingArgs('   '), openingArgs(undefined), openingArgs(42)], [[], [], [], []])
+  assert.equal(openingArgs('x'.repeat(20000))[1].length, 10000)
 })

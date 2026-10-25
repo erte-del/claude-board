@@ -159,6 +159,8 @@ badge: the number of chats waiting, or `!` while a limit is hit. Nothing is show
 
 **Permission mode** (`manual`, `auto`, `edits`, `plan`, `bypass`) is read from Claude Code's status line and shown as a small tag on the card; `auto` and `bypass` are drawn in red. Shift+Tab inside the chat cycles it.
 
+**Opening prompt:** the new-chat bar (⌘N) has a second field. Whatever you type there is sent as the chat's first message (also when you use *Browse folders…*). It is passed to `claude` as a plain argument after `--`, never through a shell.
+
 ### Inside a chat
 
 - **Split view:** two chats side by side, each a live terminal. Click a pane to focus it (its header gets an underline and the
