@@ -165,6 +165,8 @@ badge: the number of chats waiting, or `!` while a limit is hit. Nothing is show
 
 **Status chips:** next to the filter box, *Working / Waiting / Idle / Limit / Ended* chips show only chats in those states (several can be on; with none on, everything shows). They combine with the text filter and dim the other cards, like the text filter does. They are not remembered between launches.
 
+**Notes and pins:** hover a card for ✎+ (a short note shown in italics under the name; searchable with the filter) and 📌 (pin the chat: it comes first in the ⌘1–9 / Tab order and gets a dashed outline). Both are saved with the board layout.
+
 **More notification options** (Customize): *Also notify when a chat finishes* (off by default) shows the first line of Claude's last reply when a chat goes from working to idle, except for the chat you're looking at; the 🔔 on a card (hover it) mutes that one chat. *Sound with that notification* plays a sound for "needs you" notifications; with it off they are silent. *Quiet hours* silences every notification between two hours (the Dock badge still updates).
 
 **Keep Mac awake** (Customize → Off / When working / Always) stops the Mac from sleeping, so long chats aren't cut off. "When working" only holds it while a chat is producing output. It is off by default; the display may still sleep.

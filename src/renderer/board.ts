@@ -3,13 +3,14 @@ import { hubSpot, ringOffset, type Placed } from '../placement.mts'
 import { formatCountdown } from '../reset.mts'
 import { matches, statusMatches } from '../filter.mts'
 import type { PermMode } from '../screen.mts'
-import { cycle, nextInDirection, type Dir } from '../nav.mts'
+import { cycle, pinnedFirst, nextInDirection, type Dir } from '../nav.mts'
 import { emptyLayout, type ChatInfo, type Layout, type Pt, type SubInfo } from '../types'
 
 // Geometry in world px. Sizes and spacing are the knobs for restyling.
 let CARD_W = 220, CARD_H = 150 // set from settings
 const USE_H = 18 // the context / cost row
 const NAME_H = 22 // the user-given name line
+const NOTE_H = 18 // the note line under it
 const HUB_BOX = { w: 200, h: 48 } // room the folder pill takes in the middle of a ring
 const MINI_W = 150, MINI_H = 74, MINI_GAP = 6, CARD_PAD = 12
 let SPAN = 230, MIN_RING = 250 // nominal spacing between neighbours on a ring, and the smallest ring radius (follow the card width)
@@ -18,7 +19,7 @@ const GRID = 24 // dot-grid spacing
 type Handlers = { open(chatId: string, beside?: boolean): void; resume(sessionId: string, beside?: boolean): void; kill(chatId: string): void; restart(sessionId: string): void; fork(sessionId: string): void; newIn(cwd: string): void; answer(chatId: string, question: string, yes: boolean): void; save(l: Layout): void }
 type MiniEls = { el: HTMLElement; title: HTMLElement; feed: HTMLElement; feedSig: string }
 type CardEls = {
-  card: HTMLElement; idx: HTMLElement; kill: HTMLElement; mute: HTMLElement; name: HTMLElement; nameInput: HTMLInputElement; use: HTMLElement; ctx: HTMLElement; cost: HTMLElement; bar: HTMLElement; model: HTMLElement; branch: HTMLElement; mode: HTMLElement; tps: HTMLElement; feed: HTMLElement; ask: HTMLElement; restart: HTMLElement; feedSig: string
+  card: HTMLElement; idx: HTMLElement; kill: HTMLElement; mute: HTMLElement; pin: HTMLElement; noteBtn: HTMLElement; note: HTMLElement; noteInput: HTMLInputElement; name: HTMLElement; nameInput: HTMLInputElement; use: HTMLElement; ctx: HTMLElement; cost: HTMLElement; bar: HTMLElement; model: HTMLElement; branch: HTMLElement; mode: HTMLElement; tps: HTMLElement; feed: HTMLElement; ask: HTMLElement; restart: HTMLElement; feedSig: string
   subs: HTMLElement; minis: Map<string, MiniEls>; line: SVGPathElement
 }
 type Drag = { kind: 'card' | 'hub' | 'pan'; key: string; start: Pt; orig: Pt; moved: boolean; shift: boolean; onClick?: (shift: boolean) => void }
@@ -34,9 +35,9 @@ const feedNodes = (feed: string[], placeholder: string) =>
   (feed.length ? feed : [placeholder]).map((t) => el('div', !feed.length ? 'f dim' : t.startsWith('▸') ? 'f tool' : t.startsWith('↻') ? 'f dim' : 'f', t))
 
 // A chat with running sub-agents grows to hold them as a grid of mini cards under its own text.
-function sizeOf(c: ChatInfo, titled: boolean) {
+function sizeOf(c: ChatInfo, titled: boolean, noted: boolean) {
   const k = c.subagents.length
-  const extra = USE_H + (titled ? NAME_H : 0)
+  const extra = USE_H + (titled ? NAME_H : 0) + (noted ? NOTE_H : 0)
   if (!k) return { w: CARD_W, h: CARD_H + extra }
   const cols = k > 1 ? 2 : 1
   return {
@@ -69,6 +70,7 @@ export function createBoard(root: HTMLElement, h: Handlers) {
   let raf = 0
   let saveTimer = 0
   let editing: string | null = null // sessionId of the card being renamed
+  let editingNote: string | null = null // sessionId of the card whose note is being edited
   let query = '' // board filter text (not saved)
   let statuses = new Set<string>() // status chips that are on (not saved); none = every status
   let selected: string | null = null // keyboard-selected card (sessionId)
@@ -82,11 +84,11 @@ export function createBoard(root: HTMLElement, h: Handlers) {
   }
 
   // size of a card, including the name line when it has one (or is being named)
-  const sz = (c: ChatInfo) => sizeOf(c, !!layout.titles[c.sessionId] || editing === c.sessionId)
+  const sz = (c: ChatInfo) => sizeOf(c, !!layout.titles[c.sessionId] || editing === c.sessionId, !!layout.notes?.[c.sessionId] || editingNote === c.sessionId)
 
   // ---- filter: collapsed folders and "hide ended" remove cards; the search text dims the cards that don't match
   const isVisible = (c: ChatInfo) => !layout.collapsed[c.cwd] && !(layout.hideEnded && c.status === 'ended')
-  const searchable = (c: ChatInfo) => [layout.titles[c.sessionId], base(c.cwd), c.cwd, c.model, c.branch, ...c.feed, ...c.subagents.flatMap((s) => [s.title, ...s.feed])]
+  const searchable = (c: ChatInfo) => [layout.titles[c.sessionId], layout.notes?.[c.sessionId], base(c.cwd), c.cwd, c.model, c.branch, ...c.feed, ...c.subagents.flatMap((s) => [s.title, ...s.feed])]
   const filtering = () => query !== '' || statuses.size > 0
   const isMatch = (c: ChatInfo) => matches(query, searchable(c)) && statusMatches(statuses, c.status)
   const shown = () => chats.filter(isVisible)
@@ -193,7 +195,7 @@ export function createBoard(root: HTMLElement, h: Handlers) {
   }
 
   // ---- keyboard selection
-  const order = () => shown().map((c) => c.sessionId)
+  const order = () => pinnedFirst(shown().map((c) => c.sessionId), layout.pinned)
   const centreOf = (id: string): Pt | null => { const c = chats.find((x) => x.sessionId === id); return c && layout.cards[id] ? cardAt(c) : null }
   function select(id: string | null) {
     selected = id
@@ -237,6 +239,34 @@ export function createBoard(root: HTMLElement, h: Handlers) {
     schedule()
   }
 
+  // ---- notes: a short line under the name (searchable); empty clears it
+  function startNote(key: string) {
+    const e = cards.get(key)
+    if (!e) return
+    editingNote = key
+    e.noteInput.value = layout.notes?.[key] ?? ''
+    schedule()
+    requestAnimationFrame(() => requestAnimationFrame(() => { e.noteInput.focus(); e.noteInput.select() }))
+  }
+  function commitNote(key: string, keep: boolean) {
+    if (editingNote !== key) return // blur fires again once the input is hidden
+    editingNote = null
+    const v = cards.get(key)?.noteInput.value.trim() ?? ''
+    if (keep) {
+      const notes = (layout.notes ??= {})
+      if (v) notes[key] = v
+      else delete notes[key]
+      save()
+    }
+    schedule()
+  }
+  function togglePin(key: string) {
+    const pins = (layout.pinned ??= {})
+    if (pins[key]) delete pins[key]; else pins[key] = true
+    save()
+    schedule()
+  }
+
   // ---- elements
   function makeCard(key: string): CardEls {
     const card = el('div', 'card enter no-anim')
@@ -267,6 +297,26 @@ export function createBoard(root: HTMLElement, h: Handlers) {
     kill.title = 'Kill this chat'
     kill.onpointerdown = (e) => e.stopPropagation()
     kill.onclick = () => { const c = chats.find((x) => x.sessionId === key); if (c) h.kill(c.id) }
+    const note = el('div', 'note')
+    const noteInput = el('input', 'note-input')
+    noteInput.maxLength = 120
+    noteInput.placeholder = 'Add a note'
+    noteInput.spellcheck = false
+    noteInput.hidden = true
+    noteInput.onpointerdown = (e) => e.stopPropagation()
+    noteInput.onkeydown = (e) => {
+      e.stopPropagation()
+      if (e.key === 'Enter') commitNote(key, true)
+      else if (e.key === 'Escape') commitNote(key, false)
+    }
+    noteInput.onblur = () => commitNote(key, true)
+    const noteBtn = el('button', 'notebtn', '✎+')
+    noteBtn.title = 'Add or edit a note'
+    noteBtn.onpointerdown = (e) => e.stopPropagation()
+    noteBtn.onclick = (e) => { e.stopPropagation(); startNote(key) }
+    const pin = el('button', 'pin', '📌')
+    pin.onpointerdown = (e) => e.stopPropagation()
+    pin.onclick = (e) => { e.stopPropagation(); togglePin(key) }
     const fork = el('button', 'fork', '⑂') // start a new chat from a copy of this one's history
     fork.title = 'Fork: a new chat that continues from this one'
     fork.onpointerdown = (e) => e.stopPropagation()
@@ -303,7 +353,7 @@ export function createBoard(root: HTMLElement, h: Handlers) {
     restart.onpointerdown = (e) => e.stopPropagation()
     restart.onclick = (e) => { e.stopPropagation(); h.restart(key) }
     ask.append(restart)
-    card.append(name, nameInput, head, sub, use, meter, el('hr'), feed, ask, subs, alert, idx, rename, mute, fork, kill)
+    card.append(name, nameInput, note, noteInput, head, sub, use, meter, el('hr'), feed, ask, subs, alert, idx, rename, mute, fork, pin, noteBtn, kill)
     card.onpointerdown = (e) => {
       const c = chats.find((x) => x.sessionId === key)
       if (c) startDrag(e, { kind: 'card', key, orig: { ...layout.cards[key] }, onClick: (shift) => activate(c, shift) })
@@ -312,7 +362,7 @@ export function createBoard(root: HTMLElement, h: Handlers) {
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'path')
     line.classList.add('no-anim')
     svg.append(line)
-    return { card, idx, kill, mute, name, nameInput, use, ctx, cost, bar, model, branch, mode, tps, feed, ask, restart, feedSig: '\0', subs, minis: new Map(), line }
+    return { card, idx, kill, mute, pin, noteBtn, note, noteInput, name, nameInput, use, ctx, cost, bar, model, branch, mode, tps, feed, ask, restart, feedSig: '\0', subs, minis: new Map(), line }
   }
 
   function paintMute(btn: HTMLElement, key: string) {
@@ -398,6 +448,16 @@ export function createBoard(root: HTMLElement, h: Handlers) {
       const isEditing = editing === c.sessionId
       e.name.textContent = title ?? ''
       e.name.hidden = !title || isEditing
+      const noteText = layout.notes?.[c.sessionId]
+      const noteEditing = editingNote === c.sessionId
+      e.note.textContent = noteText ?? ''
+      e.note.title = noteText ?? ''
+      e.note.hidden = !noteText || noteEditing
+      e.noteInput.hidden = !noteEditing
+      const pinned = !!layout.pinned?.[c.sessionId]
+      e.card.classList.toggle('pinned', pinned)
+      e.pin.classList.toggle('on', pinned)
+      e.pin.title = pinned ? 'Pinned: first in the ⌘1–9 order. Click to unpin' : 'Pin to the top of the ⌘1–9 order'
       e.nameInput.hidden = !isEditing
       e.card.classList.toggle('has-subs', c.subagents.length > 0)
       for (const cls of [...e.card.classList]) if (cls.startsWith('s-')) e.card.classList.remove(cls)

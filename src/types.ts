@@ -33,6 +33,8 @@ export type Layout = {
   titles: Record<string, string>
   collapsed: Record<string, boolean>
   hideEnded: boolean
+  notes?: Record<string, string> // sessionId -> a short note shown under the card's name
+  pinned?: Record<string, boolean> // sessionId -> pinned to the top of the ⌘1–9 / Tab order
   muted?: Record<string, boolean> // sessionId -> no "finished" notifications for this chat
   view?: { x: number; y: number; k: number }
 }

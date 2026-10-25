@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { cycle, nextInDirection } from './nav.mts'
+import { pinnedFirst, cycle, nextInDirection } from './nav.mts'
 
 const cards = [
   { id: 'c', p: { x: 0, y: 0 } },
@@ -38,4 +38,10 @@ test('cycle wraps and handles no current / unknown current', () => {
   assert.equal(cycle(ids, null, -1), 'c')
   assert.equal(cycle(ids, 'gone', 1), 'a')
   assert.equal(cycle([], null, 1), null)
+})
+
+test('pinned chats come first, keeping their order, and the rest follow in theirs', () => {
+  assert.deepEqual(pinnedFirst(['a', 'b', 'c', 'd'], { c: true, a: true }), ['a', 'c', 'b', 'd'])
+  assert.deepEqual(pinnedFirst(['a', 'b'], undefined), ['a', 'b'])
+  assert.deepEqual(pinnedFirst(['a', 'b'], { zzz: true }), ['a', 'b']) // a pin for a chat that is gone does nothing
 })

@@ -26,3 +26,6 @@ export function cycle(ids: string[], current: string | null, delta: 1 | -1): str
   if (i < 0) return delta === 1 ? ids[0] : ids[ids.length - 1]
   return ids[(i + delta + ids.length) % ids.length]
 }
+
+/** Pinned chats first (in their current order), then the rest; this is the order ⌘1–9, Tab and the arrow keys use. */
+export const pinnedFirst = (ids: string[], pinned: Record<string, boolean> | undefined) => [...ids.filter((i) => pinned?.[i]), ...ids.filter((i) => !pinned?.[i])]

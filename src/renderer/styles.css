@@ -145,11 +145,14 @@ button.toggle.on { background: var(--accent); border-color: transparent; color: 
 .f.tool { color: var(--muted); }
 .f.dim { color: var(--muted); opacity: 0.7; }
 @keyframes rise { from { opacity: 0; transform: translateY(4px); } }
-.kill, .edit, .mute, .fork { position: absolute; top: 6px; padding: 0 6px; font-size: 11px; display: none; }
+.kill, .edit, .mute, .fork, .pin, .notebtn { position: absolute; top: 6px; padding: 0 6px; font-size: 11px; display: none; }
 .kill { right: 6px; }
 .edit { right: 32px; }
 .mute { right: 58px; }
 .fork { right: 84px; }
+.pin { right: 110px; }
+.notebtn { right: 136px; }
+.card:hover .pin, .card .pin.on, .card:hover .notebtn { display: block; }
 .card:hover .fork { display: block; }
 .card:hover .mute, .card .mute.on { display: block; }
 .card:hover .edit { display: block; }
@@ -157,10 +160,17 @@ button.toggle.on { background: var(--accent); border-color: transparent; color: 
 .card.s-waiting .edit { right: 54px; }
 .card.s-waiting .mute { right: 80px; }
 .card.s-waiting .fork { right: 106px; }
+.card.s-waiting .pin { right: 132px; }
+.card.s-waiting .notebtn { right: 158px; }
 
 /* the name you gave a chat: the card's first line */
 .name { flex: none; height: 22px; line-height: 20px; font-weight: 650; font-size: 1.18em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 58px; }
 .name-input { flex: none; height: 22px; margin-right: 58px; background: var(--btn); color: var(--fg); border: 1px solid var(--accent); border-radius: 6px; padding: 0 6px; font: 650 1.18em var(--font-ui); outline: none; user-select: text; }
+
+/* the note under the name */
+.note { flex: none; height: 18px; line-height: 16px; font-size: 0.95em; color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-input { flex: none; height: 18px; background: var(--btn); color: var(--fg); border: 1px solid var(--accent); border-radius: 6px; padding: 0 6px; font: italic 0.95em var(--font-ui); outline: none; user-select: text; }
+.card.pinned { outline: 1px dashed var(--muted); outline-offset: 4px; } /* not box-shadow: that carries the status glow */
 
 /* "!" badge on the top-right corner when Claude needs an answer (permission, question, trust dialog).
    A quarter of the circle overhangs the card: offset = -(size/4) minus the 2px card border. */

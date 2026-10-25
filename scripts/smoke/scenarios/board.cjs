@@ -54,6 +54,30 @@ module.exports = async function (t) {
   await t.js(`document.getElementById('filter').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`); await settle()
   t.check('Esc clears the filter', (await t.js(`document.getElementById('filter').value`)) === '' && !(await cards()).some((c) => c.includes('dim')))
 
+  // ---- notes and pins
+  const h = (i) => t.js(`document.querySelectorAll('.card')[${i}].getBoundingClientRect().height`)
+  const h1 = await h(2)
+  await t.js(`document.querySelectorAll('.card')[2].querySelector('.notebtn').click()`); await settle(500)
+  t.check('the note button opens a note box with the cursor in it', await t.js(`document.activeElement === document.querySelectorAll('.card')[2].querySelector('.note-input')`))
+  await t.js(`(()=>{const i=document.querySelectorAll('.card')[2].querySelector('.note-input'); i.value='  waiting on zebra review  '; i.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))})()`); await settle(700)
+  t.check('Enter saves the trimmed note under the card\'s name', (await t.text('.card .note', 2)) === 'waiting on zebra review')
+  t.check('and the card makes room for it', Math.abs((await h(2)) - h1) > 5)
+  await t.sleep(500)
+  t.check('notes are saved in the layout', (t.readJson('board-layout.json') || {}).notes?.s3 === 'waiting on zebra review')
+  await t.js(`(()=>{const f=document.getElementById('filter'); f.value='zebra'; f.dispatchEvent(new Event('input',{bubbles:true}))})()`); await settle()
+  t.check('notes are searchable', (await t.text('#filter-count')) === '1 of 6')
+  await t.js(`document.getElementById('filter').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`); await settle()
+  await t.js(`document.querySelectorAll('.card')[2].querySelector('.notebtn').click()`); await settle(400)
+  await t.js(`(()=>{const i=document.querySelectorAll('.card')[2].querySelector('.note-input'); i.value=''; i.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))})()`); await settle(500)
+  t.check('an empty note clears it', !(t.readJson('board-layout.json') || {}).notes?.s3 && (await t.js(`document.querySelectorAll('.card')[2].querySelector('.note').hidden`)))
+  const firstByTab = async () => { await t.js(`document.activeElement && document.activeElement.blur()`); await t.key('Escape', { key: 'Escape' }); await settle(200); await t.key('Tab', { key: 'Tab' }); await settle(300); return (await cards()).findIndex((c) => c.includes('sel')) }
+  t.check('without pins Tab starts at the first chat', (await firstByTab()) === 0)
+  await t.js(`document.querySelectorAll('.card')[2].querySelector('.pin').click()`); await settle(500)
+  t.check('pinning shows the pin and saves it', (await t.js(`getComputedStyle(document.querySelectorAll('.card')[2].querySelector('.pin')).display`)) === 'block' && (t.readJson('board-layout.json') || {}).pinned?.s3 === true)
+  t.check('a pinned chat comes first in the Tab order (the ⌘1 slot)', (await firstByTab()) === 2)
+  await t.js(`document.querySelectorAll('.card')[2].querySelector('.pin').click()`); await settle(400)
+  t.check('unpinning puts it back', (await firstByTab()) === 0 && !(t.readJson('board-layout.json') || {}).pinned?.s3)
+
   // ---- status chips
   const dimmed = async () => (await cards()).filter((c) => c.includes('dim')).length
   const chip = (s) => t.click(`#chips .chip[data-status="${s}"]`)
