@@ -9,6 +9,7 @@ import path from 'node:path'
 import * as pty from 'node-pty'
 import { Terminal } from '@xterm/headless'
 import { encodeCwd, scanSessions, type SessionInfo } from './scanner.mts'
+import { pushRemoved, sanitizeRemoved, takeRestorable, type Removed } from './removed.mts'
 import { staleImages } from './pasteimg.mts'
 import { planRestart } from './restart.mts'
 import { openingArgs, resolveDir } from './paths.mts'
@@ -68,6 +69,7 @@ let lastBadge = ''
 let wasLimited = false
 let limitResetAt: number | null = null // when the current limit lifts, if its notice said (applies to every limited chat)
 let muted: Record<string, boolean> = {} // sessionIds whose "finished" notifications are off (kept in the layout file)
+let removedLog: Removed[] = [] // cards the user removed, newest last (removed.json), so "Undo" can bring them back
 let titles: Record<string, string> = {} // names the user gave cards (kept in the layout file), for notification text
 let stopping = false
 
@@ -287,6 +289,12 @@ function forkChat(sessionId: string): { ok: true; id: string } | { ok: false; er
   }
 }
 
+// Removing a card forgets the chat (its transcript stays in Claude's history); keep a record so it can come back.
+function logRemoval(sessionId: string, cwd: string) {
+  removedLog = pushRemoved(removedLog, { sessionId, cwd, name: titles[sessionId] || path.basename(cwd), at: Date.now() })
+  void writeJson('removed.json', removedLog)
+}
+
 function forget(sessionId: string) {
   registry = registry.filter((r) => r.sessionId !== sessionId)
   void writeJson('chats.json', registry)
@@ -496,25 +504,47 @@ ipcMain.handle('saveSettings', (_e, settings: unknown) => {
   applySettings(settings)
   return writeJson('settings.json', settings)
 })
-ipcMain.handle('killChat', (_e, id: string) => {
+ipcMain.handle('killChat', (_e, id: string): string | null => { // the name of the card if this removed it, else null (a kill)
   const dormantEntry = [...dormant.values()].find((d) => d.id === id)
   if (dormantEntry) { // a restored card: removing it means forgetting the chat (its transcript stays in Claude's history)
     dormant.delete(dormantEntry.sessionId)
     forget(dormantEntry.sessionId)
+    logRemoval(dormantEntry.sessionId, dormantEntry.cwd)
     notifyChanged()
-    return
+    return removedLog[removedLog.length - 1].name
   }
   const c = chats.get(id)
-  if (!c) return
+  if (!c) return null
   if (c.status === 'ended') { // already dead: this is "remove card"
     chats.delete(id)
     forget(c.sessionId)
+    logRemoval(c.sessionId, c.cwd)
     attached.delete(id)
     notifyChanged()
-  } else {
-    c.killed = true
-    killTree(c, 'SIGHUP')
+    return removedLog[removedLog.length - 1].name
   }
+  c.killed = true
+  killTree(c, 'SIGHUP')
+  return null
+})
+// Undo: the newest removed card whose transcript still exists comes back as a gray resumable card (title and position are still in the layout).
+ipcMain.handle('undoRemove', (): { ok: true; name: string } | { ok: false } => {
+  const onBoard = (s: string) => dormant.has(s) || [...chats.values()].some((c) => c.sessionId === s)
+  let restored: Dormant | null = null
+  const got = takeRestorable(removedLog, (e) => {
+    if (onBoard(e.sessionId)) return false
+    restored = makeDormant(e.cwd, e.sessionId)
+    return restored !== null
+  })
+  removedLog = got.log
+  void writeJson('removed.json', removedLog)
+  if (!got.entry || !restored) return { ok: false }
+  const d = restored as Dormant
+  dormant.set(d.sessionId, d)
+  registry.push({ sessionId: d.sessionId, cwd: d.cwd })
+  void writeJson('chats.json', registry)
+  notifyChanged()
+  return { ok: true, name: got.entry.name }
 })
 ipcMain.on('pty:write', (_e, id: string, data: string) => {
   const c = chats.get(id)
@@ -586,6 +616,7 @@ app.whenReady().then(async () => {
   titles = saved?.titles ?? {}
   muted = saved?.muted ?? {}
   loadRegistry()
+  removedLog = sanitizeRemoved(readJson('removed.json'))
   // The app itself makes no network requests; this makes sure nothing in the page can either.
   session.defaultSession.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] }, (_d, cb) => cb({ cancel: true }))
 

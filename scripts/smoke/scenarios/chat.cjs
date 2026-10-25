@@ -299,4 +299,30 @@ module.exports = async function (t) {
     await t.waitFor(async () => (await info(empty)).status === 'idle', { timeout: 8000 })
     const r = await t.js(`api.forkChat(${JSON.stringify((await info(empty)).sessionId)})`)
     t.check('a chat with no messages says there is nothing to fork', r.ok === false && /Nothing to fork/.test(r.error), JSON.stringify(r)) }
+
+  // ---- undo remove: ✕ on an ended card removes it (with a toast), Undo / ⌘Z brings it back
+  { const x = await t.newChat(A)
+    await t.waitFor(async () => (await info(x)).status === 'idle', { timeout: 8000 })
+    await t.say(x, 'remember me')
+    const sid = (await info(x)).sessionId
+    await t.waitFor(async () => (await info(x)).feed.some((f) => f.includes('echo: remember me')), { timeout: 8000 })
+    const xBtn = () => t.js(`(()=>{const b=document.querySelector('.card[data-sid="${sid}"] .kill'); if(!b) return false; b.click(); return true})()`)
+    const toastText = () => t.js(`(()=>{const e=document.getElementById('toast'); return e.classList.contains('open') ? e.textContent : null})()`)
+    await xBtn()
+    await t.waitFor(async () => (await info(x)).status === 'ended', { timeout: 8000 })
+    t.check('✕ on a live chat only kills it (no removal toast, card stays)', (await toastText()) === null && (await t.count(`.card[data-sid="${sid}"]`)) === 1)
+    await xBtn()
+    t.check('✕ on the ended card removes it and offers Undo', !!(await t.waitFor(async () => /^Removed .*Undo$/.test((await toastText()) || '') && (await t.count(`.card[data-sid="${sid}"]`)) === 0, { timeout: 4000 })), await toastText())
+    t.check('the removal is logged in removed.json', (t.readJson('removed.json') || []).some((e) => e.sessionId === sid))
+    await t.js(`document.querySelector('#toast button').click()`)
+    t.check('Undo brings the card back as a resumable gray card', !!(await t.waitFor(async () => { const c = (await t.chats()).find((y) => y.sessionId === sid); return c && c.status === 'ended' && c.resumable && (await t.count(`.card[data-sid="${sid}"]`)) === 1 }, { timeout: 6000 })))
+    t.check('and it is off the removed list again', !(t.readJson('removed.json') || []).some((e) => e.sessionId === sid))
+    await xBtn()
+    await t.waitFor(async () => (await t.count(`.card[data-sid="${sid}"]`)) === 0, { timeout: 4000 })
+    await t.key('KeyB', { meta: true, shift: true, key: 'B' }); await t.sleep(400) // ⌘Z undoes on the board
+    await t.js('document.activeElement && document.activeElement.blur()')
+    await t.key('KeyZ', { meta: true, key: 'z' })
+    t.check('⌘Z does the same', !!(await t.waitFor(async () => (await t.count(`.card[data-sid="${sid}"]`)) === 1, { timeout: 6000 })))
+    const none = await t.js('api.undoRemove()')
+    t.check('with nothing left to undo it says so', none.ok === false, JSON.stringify(none)) }
 }

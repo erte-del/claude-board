@@ -238,6 +238,7 @@ export function createBoard(root: HTMLElement, h: Handlers) {
   // ---- elements
   function makeCard(key: string): CardEls {
     const card = el('div', 'card enter no-anim')
+    card.dataset.sid = key
     const model = el('span', 'model'), dot = el('span', 'dot'), branch = el('span', 'branch'), mode = el('span', 'mode'), tps = el('span', 'tps'), feed = el('div', 'feed'), subs = el('div', 'subs')
     const head = el('div', 'head'), sub = el('div', 'sub')
     head.append(model, dot)

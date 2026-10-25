@@ -58,6 +58,25 @@ async function loadFonts(): Promise<string[]> {
 }
 const fontsReady = loadFonts()
 
+// ---- toast: a short message with one action ("Removed X · Undo")
+const toastEl = $('toast')
+let toastTimer = 0
+function toast(text: string, action?: string, run?: () => void) {
+  toastEl.replaceChildren(Object.assign(document.createElement('span'), { textContent: text }))
+  if (action && run) {
+    const b = Object.assign(document.createElement('button'), { textContent: action })
+    b.onclick = () => { toastEl.classList.remove('open'); run() }
+    toastEl.append(b)
+  }
+  toastEl.classList.add('open')
+  clearTimeout(toastTimer)
+  toastTimer = window.setTimeout(() => toastEl.classList.remove('open'), 8000)
+}
+async function undoRemove() {
+  const r = await api.undoRemove()
+  toast(r.ok ? `Restored ${r.name}` : 'Nothing to restore')
+}
+
 // ---- the chat view: one terminal, or two side by side
 const chatPanes = createChatView({
   api,
@@ -155,7 +174,7 @@ function toggleSplitMenu() {
 }
 $('split').onclick = toggleSplitMenu
 
-const board = createBoard($('board'), { open: openFromBoard, resume: resumeFromBoard, kill: (id) => void api.killChat(id), fork: (s) => void api.forkChat(s).then((r) => { if (!r.ok) showError(r.error) }), restart: (s) => void api.resumeChat(s).then((r) => { if (!r.ok) showError(r.error) }), newIn: (cwd) => void startChat(cwd), answer: (id, q, yes) => void api.answerPrompt(id, q, yes ? 'yes' : 'no'), save: (l) => void api.saveLayout(l) })
+const board = createBoard($('board'), { open: openFromBoard, resume: resumeFromBoard, kill: (id) => void api.killChat(id).then((removed) => { if (removed !== null) toast(`Removed ${removed}`, 'Undo', undoRemove) }), fork: (s) => void api.forkChat(s).then((r) => { if (!r.ok) showError(r.error) }), restart: (s) => void api.resumeChat(s).then((r) => { if (!r.ok) showError(r.error) }), newIn: (cwd) => void startChat(cwd), answer: (id, q, yes) => void api.answerPrompt(id, q, yes ? 'yes' : 'no'), save: (l) => void api.saveLayout(l) })
 
 // ---- settings: applied live, saved shortly after the last change
 let saveTimer = 0
@@ -302,7 +321,8 @@ window.addEventListener('keydown', (e) => {
     if (e.key === 'Tab') { e.preventDefault(); board.cycleSelection(e.shiftKey ? -1 : 1); return }
     if (e.key === 'Enter' && board.selectedId()) { e.preventDefault(); board.activateSelected(e.shiftKey); return }
   }
-  if (e.metaKey && e.code === 'KeyN') { e.preventDefault(); togglePopover() }
+  if (e.metaKey && !e.shiftKey && e.code === 'KeyZ' && !typing()) { e.preventDefault(); void undoRemove() }
+  else if (e.metaKey && e.code === 'KeyN') { e.preventDefault(); togglePopover() }
   else if (e.metaKey && e.code === 'KeyF') { e.preventDefault(); filter.focus(); filter.select() }
   else if (e.metaKey && e.shiftKey && e.code === 'KeyA') { e.preventDefault(); board.arrange() }
   else if (e.metaKey && e.code === 'KeyO') { e.preventDefault(); togglePicker() }
