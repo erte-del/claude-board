@@ -507,11 +507,12 @@ ipcMain.handle('pasteImage', async () => {
 // Card menu: show a chat's folder in Finder or open it in an editor. The folder is looked up from the chat; the page only names the chat and a fixed action.
 // CB_OPEN lets the smoke tests substitute a recorder for /usr/bin/open.
 ipcMain.handle('editors', () => installedEditors(existsSync, os.homedir()).map(({ id, label }) => ({ id, label })))
-ipcMain.handle('openFolder', (_e, sessionId: string, how: string): Promise<{ ok: true } | { ok: false; error: string }> => {
+ipcMain.handle('openFolder', async (_e, sessionId: string, how: string): Promise<{ ok: true } | { ok: false; error: string }> => {
   const cwd = [...chats.values()].find((c) => c.sessionId === sessionId)?.cwd ?? dormant.get(sessionId)?.cwd
-  if (!cwd) return Promise.resolve({ ok: false, error: 'That chat is no longer on the board.' })
+  if (!cwd) return { ok: false, error: 'That chat is no longer on the board.' }
+  if (how === 'copy') { await clipboard.writeText(cwd); return { ok: true } } // the chat's folder, never text supplied by the page
   const editor = EDITORS.find((e) => e.id === how)
-  if (how !== 'finder' && !editor) return Promise.resolve({ ok: false, error: 'Unknown action.' })
+  if (how !== 'finder' && !editor) return { ok: false, error: 'Unknown action.' }
   const args = editor ? ['-a', editor.app, cwd] : [cwd]
   return new Promise((resolve) => execFile(process.env.CB_OPEN || '/usr/bin/open', args, (err) => resolve(err ? { ok: false, error: `Couldn't open ${editor?.label ?? 'Finder'}: ${err.message.split('\n')[0]}` } : { ok: true })))
 })

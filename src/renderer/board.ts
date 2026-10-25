@@ -17,7 +17,7 @@ const MINI_W = 150, MINI_H = 74, MINI_GAP = 6, CARD_PAD = 12
 let SPAN = 230, MIN_RING = 250 // nominal spacing between neighbours on a ring, and the smallest ring radius (follow the card width)
 const GRID = 24 // dot-grid spacing
 
-type Handlers = { open(chatId: string, beside?: boolean): void; resume(sessionId: string, beside?: boolean): void; kill(chatId: string): void; restart(sessionId: string): void; fork(sessionId: string): void; folder(sessionId: string, how: string): void; notify(text: string): void; newIn(cwd: string): void; answer(chatId: string, question: string, yes: boolean): void; save(l: Layout): void }
+type Handlers = { open(chatId: string, beside?: boolean): void; resume(sessionId: string, beside?: boolean): void; kill(chatId: string): void; restart(sessionId: string): void; fork(sessionId: string): void; folder(sessionId: string, how: string): void; newIn(cwd: string): void; answer(chatId: string, question: string, yes: boolean): void; save(l: Layout): void }
 type MiniEls = { el: HTMLElement; title: HTMLElement; feed: HTMLElement; feedSig: string }
 type CardEls = {
   card: HTMLElement; idx: HTMLElement; kill: HTMLElement; mute: HTMLElement; pin: HTMLElement; noteBtn: HTMLElement; note: HTMLElement; noteInput: HTMLInputElement; name: HTMLElement; nameInput: HTMLInputElement; use: HTMLElement; ctx: HTMLElement; cost: HTMLElement; bar: HTMLElement; model: HTMLElement; branch: HTMLElement; mode: HTMLElement; tps: HTMLElement; feed: HTMLElement; ask: HTMLElement; restart: HTMLElement; feedSig: string
@@ -307,7 +307,7 @@ export function createBoard(root: HTMLElement, h: Handlers) {
         { label: 'Fork', run: () => h.fork(key) },
         'sep',
         { label: 'Show in Finder', run: () => h.folder(key, 'finder') },
-        { label: 'Copy path', run: () => { void navigator.clipboard.writeText(c.cwd).then(() => h.notify('Path copied'), () => h.notify("Couldn't copy the path")) } },
+        { label: 'Copy path', run: () => h.folder(key, 'copy') },
         ...editorList.map((ed): MenuItem => ({ label: `Open in ${ed.label}`, run: () => h.folder(key, ed.id) })),
         'sep',
         { label: c.status === 'ended' ? 'Remove card' : 'Kill chat', run: () => h.kill(c.id), danger: true },
