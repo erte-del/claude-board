@@ -1,6 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Notification, powerSaveBlocker, screen, session, shell } from 'electron'
 import { execFile } from 'node:child_process'
-import { accessSync, constants, mkdirSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
+import { accessSync, constants, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { chmod, mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
@@ -10,6 +10,7 @@ import * as pty from 'node-pty'
 import { Terminal } from '@xterm/headless'
 import { encodeCwd, scanSessions, type SessionInfo } from './scanner.mts'
 import { pushRemoved, sanitizeRemoved, takeRestorable, type Removed } from './removed.mts'
+import { EDITORS, installedEditors } from './editors.mts'
 import { staleImages } from './pasteimg.mts'
 import { planRestart } from './restart.mts'
 import { openingArgs, resolveDir } from './paths.mts'
@@ -498,6 +499,17 @@ ipcMain.handle('pasteImage', async () => {
     log(`paste image failed: ${e instanceof Error ? e.stack : e}`)
     return null
   }
+})
+// Card menu: show a chat's folder in Finder or open it in an editor. The folder is looked up from the chat; the page only names the chat and a fixed action.
+// CB_OPEN lets the smoke tests substitute a recorder for /usr/bin/open.
+ipcMain.handle('editors', () => installedEditors(existsSync, os.homedir()).map(({ id, label }) => ({ id, label })))
+ipcMain.handle('openFolder', (_e, sessionId: string, how: string): Promise<{ ok: true } | { ok: false; error: string }> => {
+  const cwd = [...chats.values()].find((c) => c.sessionId === sessionId)?.cwd ?? dormant.get(sessionId)?.cwd
+  if (!cwd) return Promise.resolve({ ok: false, error: 'That chat is no longer on the board.' })
+  const editor = EDITORS.find((e) => e.id === how)
+  if (how !== 'finder' && !editor) return Promise.resolve({ ok: false, error: 'Unknown action.' })
+  const args = editor ? ['-a', editor.app, cwd] : [cwd]
+  return new Promise((resolve) => execFile(process.env.CB_OPEN || '/usr/bin/open', args, (err) => resolve(err ? { ok: false, error: `Couldn't open ${editor?.label ?? 'Finder'}: ${err.message.split('\n')[0]}` } : { ok: true })))
 })
 ipcMain.handle('loadSettings', () => readJson('settings.json'))
 ipcMain.handle('saveSettings', (_e, settings: unknown) => {

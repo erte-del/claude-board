@@ -57,6 +57,7 @@ async function loadFonts(): Promise<string[]> {
   return [...system, ...user.sort((x, y) => x.localeCompare(y))].filter((n) => n !== DEFAULT_TERM_FONT)
 }
 const fontsReady = loadFonts()
+void api.editors().then((list) => board.setEditors(list))
 
 // ---- toast: a short message with one action ("Removed X · Undo")
 const toastEl = $('toast')
@@ -174,7 +175,7 @@ function toggleSplitMenu() {
 }
 $('split').onclick = toggleSplitMenu
 
-const board = createBoard($('board'), { open: openFromBoard, resume: resumeFromBoard, kill: (id) => void api.killChat(id).then((removed) => { if (removed !== null) toast(`Removed ${removed}`, 'Undo', undoRemove) }), fork: (s) => void api.forkChat(s).then((r) => { if (!r.ok) showError(r.error) }), restart: (s) => void api.resumeChat(s).then((r) => { if (!r.ok) showError(r.error) }), newIn: (cwd) => void startChat(cwd), answer: (id, q, yes) => void api.answerPrompt(id, q, yes ? 'yes' : 'no'), save: (l) => void api.saveLayout(l) })
+const board = createBoard($('board'), { open: openFromBoard, resume: resumeFromBoard, kill: (id) => void api.killChat(id).then((removed) => { if (removed !== null) toast(`Removed ${removed}`, 'Undo', undoRemove) }), folder: (s, how) => void api.openFolder(s, how).then((r) => { if (!r.ok) toast(r.error) }), notify: (t) => toast(t), fork: (s) => void api.forkChat(s).then((r) => { if (!r.ok) showError(r.error) }), restart: (s) => void api.resumeChat(s).then((r) => { if (!r.ok) showError(r.error) }), newIn: (cwd) => void startChat(cwd), answer: (id, q, yes) => void api.answerPrompt(id, q, yes ? 'yes' : 'no'), save: (l) => void api.saveLayout(l) })
 
 // ---- settings: applied live, saved shortly after the last change
 let saveTimer = 0

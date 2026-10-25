@@ -3,6 +3,7 @@ import { hubSpot, ringOffset, type Placed } from '../placement.mts'
 import { formatCountdown } from '../reset.mts'
 import { matches, statusMatches } from '../filter.mts'
 import type { PermMode } from '../screen.mts'
+import { closeCardMenu, openCardMenu, type MenuItem } from './cardmenu'
 import { cycle, pinnedFirst, nextInDirection, type Dir } from '../nav.mts'
 import { emptyLayout, type ChatInfo, type Layout, type Pt, type SubInfo } from '../types'
 
@@ -16,7 +17,7 @@ const MINI_W = 150, MINI_H = 74, MINI_GAP = 6, CARD_PAD = 12
 let SPAN = 230, MIN_RING = 250 // nominal spacing between neighbours on a ring, and the smallest ring radius (follow the card width)
 const GRID = 24 // dot-grid spacing
 
-type Handlers = { open(chatId: string, beside?: boolean): void; resume(sessionId: string, beside?: boolean): void; kill(chatId: string): void; restart(sessionId: string): void; fork(sessionId: string): void; newIn(cwd: string): void; answer(chatId: string, question: string, yes: boolean): void; save(l: Layout): void }
+type Handlers = { open(chatId: string, beside?: boolean): void; resume(sessionId: string, beside?: boolean): void; kill(chatId: string): void; restart(sessionId: string): void; fork(sessionId: string): void; folder(sessionId: string, how: string): void; notify(text: string): void; newIn(cwd: string): void; answer(chatId: string, question: string, yes: boolean): void; save(l: Layout): void }
 type MiniEls = { el: HTMLElement; title: HTMLElement; feed: HTMLElement; feedSig: string }
 type CardEls = {
   card: HTMLElement; idx: HTMLElement; kill: HTMLElement; mute: HTMLElement; pin: HTMLElement; noteBtn: HTMLElement; note: HTMLElement; noteInput: HTMLInputElement; name: HTMLElement; nameInput: HTMLInputElement; use: HTMLElement; ctx: HTMLElement; cost: HTMLElement; bar: HTMLElement; model: HTMLElement; branch: HTMLElement; mode: HTMLElement; tps: HTMLElement; feed: HTMLElement; ask: HTMLElement; restart: HTMLElement; feedSig: string
@@ -69,6 +70,7 @@ export function createBoard(root: HTMLElement, h: Handlers) {
   let drag: Drag | null = null
   let raf = 0
   let saveTimer = 0
+  let editorList: { id: string; label: string }[] = [] // apps a card's folder can be opened in (set once at start-up)
   let editing: string | null = null // sessionId of the card being renamed
   let editingNote: string | null = null // sessionId of the card whose note is being edited
   let query = '' // board filter text (not saved)
@@ -292,7 +294,26 @@ export function createBoard(root: HTMLElement, h: Handlers) {
     rename.title = 'Rename'
     rename.onpointerdown = (e) => e.stopPropagation()
     rename.onclick = () => startName(key)
-    card.oncontextmenu = (e) => { e.preventDefault(); startName(key) }
+    card.oncontextmenu = (e) => {
+      e.preventDefault()
+      const c = chats.find((x) => x.sessionId === key)
+      if (!c) return
+      const pinned = !!layout.pinned?.[key], muted = !!layout.muted?.[key]
+      const items: MenuItem[] = [
+        { label: 'Rename', run: () => startName(key) },
+        { label: layout.notes?.[key] ? 'Edit note' : 'Add note', run: () => startNote(key) },
+        { label: pinned ? 'Unpin' : 'Pin to top', run: () => togglePin(key) },
+        { label: muted ? 'Unmute "finished" notification' : 'Mute "finished" notification', run: () => { const m = (layout.muted ??= {}); if (muted) delete m[key]; else m[key] = true; save(); schedule() } },
+        { label: 'Fork', run: () => h.fork(key) },
+        'sep',
+        { label: 'Show in Finder', run: () => h.folder(key, 'finder') },
+        { label: 'Copy path', run: () => { void navigator.clipboard.writeText(c.cwd).then(() => h.notify('Path copied'), () => h.notify("Couldn't copy the path")) } },
+        ...editorList.map((ed): MenuItem => ({ label: `Open in ${ed.label}`, run: () => h.folder(key, ed.id) })),
+        'sep',
+        { label: c.status === 'ended' ? 'Remove card' : 'Kill chat', run: () => h.kill(c.id), danger: true },
+      ]
+      openCardMenu(e.clientX, e.clientY, items)
+    }
     const kill = el('button', 'kill', '✕')
     kill.title = 'Kill this chat'
     kill.onpointerdown = (e) => e.stopPropagation()
@@ -593,6 +614,8 @@ export function createBoard(root: HTMLElement, h: Handlers) {
     activateAt(i: number) { const c = chats.find((x) => x.sessionId === order()[i]); if (c) activate(c); return !!c },
     showKeys(on: boolean) { root.classList.toggle('show-keys', on) },
     // ---- filter
+    setEditors(list: { id: string; label: string }[]) { editorList = list },
+    closeMenu: closeCardMenu,
     setQuery(q: string) { query = q; schedule() },
     setStatuses(list: string[]) { statuses = new Set(list); schedule() },
     setHideEnded(on: boolean) { layout.hideEnded = on; save(); schedule() },

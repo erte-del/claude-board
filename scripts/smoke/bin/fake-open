@@ -1,0 +1,3 @@
+#!/bin/sh
+# Stand-in for /usr/bin/open in the smoke tests (the app is pointed at it with CB_OPEN): records what it was asked to open.
+printf '%s\n' "$*" >> "$SMOKE_DATA/opened.log"

@@ -49,7 +49,7 @@ function runScenario(name, strictQuit = false, timeoutMs = 150_000) {
     const logFile = path.join(tmp, `${name}.log`)
     const logFd = openSync(logFile, 'w')
     const child = spawn(electron, [path.join(smoke, 'harness.cjs')], {
-      env: { ...process.env, HOME: home, SMOKE_DATA: data, SMOKE_SCENARIO: name, SMOKE_BIN: path.join(smoke, 'bin'), SHELL: path.join(smoke, 'fake-shell.sh') },
+      env: { ...process.env, HOME: home, SMOKE_DATA: data, SMOKE_SCENARIO: name, SMOKE_BIN: path.join(smoke, 'bin'), CB_OPEN: path.join(smoke, 'bin', 'fake-open'), SHELL: path.join(smoke, 'fake-shell.sh') },
       stdio: ['ignore', logFd, logFd],
       detached: true, // its own process group, so a lingering app and its helpers can be killed together
     })

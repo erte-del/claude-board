@@ -325,4 +325,22 @@ module.exports = async function (t) {
     t.check('⌘Z does the same', !!(await t.waitFor(async () => (await t.count(`.card[data-sid="${sid}"]`)) === 1, { timeout: 6000 })))
     const none = await t.js('api.undoRemove()')
     t.check('with nothing left to undo it says so', none.ok === false, JSON.stringify(none)) }
+
+  // ---- card menu on real chats: Finder, copy path, open in an app (the app is pointed at a recorder instead of /usr/bin/open)
+  { const { clipboard } = require('electron')
+    const mc = await t.newChat(A)
+    await t.waitFor(async () => (await info(mc)).status === 'idle', { timeout: 8000 })
+    const sid = (await info(mc)).sessionId, cwd = fs.realpathSync(A)
+    const opened = () => { try { return fs.readFileSync(path.join(t.data, 'opened.log'), 'utf8').trim().split('\n') } catch { return [] } }
+    const choose = async (label) => {
+      await t.js(`document.querySelector('.card[data-sid="${sid}"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:300,clientY:300}))`); await t.sleep(300)
+      return t.js(`(()=>{const b=[...document.querySelectorAll('.ctxmenu button')].find(b=>b.textContent===${JSON.stringify(label)}); if(!b) return false; b.click(); return true})()`)
+    }
+    t.check('"Show in Finder" opens the chat\'s folder', (await choose('Show in Finder')) && !!(await t.waitFor(() => opened().includes(cwd), { timeout: 4000 })), JSON.stringify(opened()))
+    t.check('"Open in Terminal" opens it in that app', (await choose('Open in Terminal')) && !!(await t.waitFor(() => opened().includes(`-a Terminal ${cwd}`), { timeout: 4000 })), JSON.stringify(opened()))
+    t.check('"Copy path" puts the folder on the clipboard and says so', (await choose('Copy path')) && !!(await t.waitFor(async () => (await clipboard.readText()) === cwd, { timeout: 4000 })) && /Path copied/.test(await t.text('#toast')))
+    const bad = await t.js(`api.openFolder(${JSON.stringify(sid)}, '../../bin/sh')`)
+    const unknown = await t.js(`api.openFolder('not-a-chat', 'finder')`)
+    t.check('the page can only name a chat and a fixed action, never a path or a command', bad.ok === false && unknown.ok === false && !opened().some((l) => l.includes('sh')), JSON.stringify([bad, unknown]))
+    t.check('"Kill chat" in the menu kills it', (await choose('Kill chat')) && !!(await t.waitFor(async () => (await info(mc)).status === 'ended', { timeout: 8000 }))) }
 }

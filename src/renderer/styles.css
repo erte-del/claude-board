@@ -284,6 +284,13 @@ input.switch:checked::after { transform: translateX(14px); }
 
 kbd { font: 11px var(--font-mono); color: var(--muted); background: var(--btn); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
 
+/* ---- card right-click menu ---- */
+.ctxmenu { position: fixed; z-index: 60; min-width: 190px; padding: 5px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 28px #0007; display: flex; flex-direction: column; font-size: 12px; }
+.ctxmenu button { text-align: left; background: transparent; border: 0; color: var(--fg); font: inherit; padding: 5px 10px; border-radius: 6px; cursor: pointer; }
+.ctxmenu button:hover, .ctxmenu button:focus-visible { background: var(--btn-hover); outline: none; }
+.ctxmenu button.danger { color: var(--c-limit); }
+.ctxmenu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; }
+
 /* ---- toast ---- */
 #toast { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 12px); display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font-size: 12px; box-shadow: 0 6px 24px #0006; opacity: 0; visibility: hidden; transition: opacity 0.2s, transform 0.2s, visibility 0s linear 0.2s; z-index: 50; }
 #toast.open { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition-delay: 0s; }
