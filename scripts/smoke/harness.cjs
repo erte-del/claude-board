@@ -85,6 +85,7 @@ app.whenReady().then(async () => {
     await t.waitFor(() => BrowserWindow.getAllWindows()[0], { timeout: 15000 })
     await new Promise((r) => (t.wc.isLoading() ? t.wc.once('did-finish-load', r) : r()))
     await sleep(2000) // fonts, settings, saved chats
+    t.wc.setBackgroundThrottling(false) // if the window is covered or the screen is locked, rAF-driven renders must still run
     app.focus({ steal: true }) // a focused window also keeps real macOS notifications from popping up during the run
     await require(path.join(__dirname, 'scenarios', scenarioName + '.cjs'))(t)
   } catch (e) {
