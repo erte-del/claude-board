@@ -2,7 +2,7 @@ import { closePicker, openPicker } from './colorpicker'
 import { DEFAULT_TERM_FONT, defaultSettings, type Settings, type StateKey, type Theme } from '../types'
 
 type NumKey = 'cardW' | 'cardH' | 'radius' | 'cardFont' | 'lineWidth' | 'termFont'
-type BoolKey = 'curved' | 'grid' | 'motion' | 'notifications'
+type BoolKey = 'curved' | 'grid' | 'motion' | 'notifications' | 'quietLaunch'
 
 const STATES: [StateKey, string][] = [['working', 'Working'], ['idle', 'Idle'], ['waiting', 'Waiting for you'], ['limit', 'Limit hit'], ['ended', 'Ended']]
 const SHORTCUTS: [string, string][] = [['⌘N', 'New chat'], ['⌘O', 'Add existing chat'], ['⌘⇧A', 'Auto-arrange'], ['⌘F', 'Filter chats (in a chat: find in the terminal)'], ['⌘\\', 'Split: show another chat beside this one'], ['⇧-click', 'Open a chat beside the last one you viewed'], ['← ↑ ↓ →', 'Select a chat'], ['Enter', 'Open the selected chat'], ['Tab', 'Next chat'], ['⌘1–9', 'Jump to chat 1–9 (hold ⌘ to see them)'], ['⌘,', 'Customize'], ['⌘⇧B', 'Back to board'], ['⌘0', 'Fit board to window'], ['Esc', 'Close bar / panel']]
@@ -120,6 +120,7 @@ export function createSettings(panel: HTMLElement, initial: Settings, onChange: 
       section('Status colours', ...STATES.map(([k, label]) => color(label, k))),
       section('Other',
         toggle('Notify me when a chat needs me', 'notifications'),
+        toggle('Chats open apps in the background (new chats)', 'quietLaunch'),
         toggle('Smooth motion', 'motion'),
         fontSelect(),
         slider('Terminal text', 'termFont', 10, 18, 1)),

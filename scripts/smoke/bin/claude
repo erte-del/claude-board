@@ -6,6 +6,7 @@
 //   limit S      hit a usage limit that lifts at the next whole minute at least S seconds away
 //   agent        start a sub-agent that finishes after a few seconds
 //   crash        print an error and exit with code 1
+//   quiet        report $BROWSER and the first PATH folder (the no-focus shim)
 //   exit         exit normally
 //   anything else: replies "echo: <text>"
 const fs = require('fs')
@@ -53,6 +54,7 @@ function submit(text) {
   write('\r\n')
   user(text)
   const [cmd, arg] = text.trim().split(/\s+/)
+  if (cmd === 'quiet') return reply(`quiet: ${process.env.BROWSER} first=${process.env.PATH.split(':')[0]}`)
   if (cmd === 'exit') process.exit(0)
   if (cmd === 'crash') { process.stderr.write('fatal: stub crash\n'); process.exit(1) }
   if (cmd === 'ask') {

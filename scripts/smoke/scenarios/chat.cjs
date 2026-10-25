@@ -178,4 +178,11 @@ module.exports = async function (t) {
   const newestPlus = (await t.chats()).slice(-1)[0]
   t.check('"+" on the folder box starts another chat in that folder', !!grewPlus && newestPlus.cwd === fs.realpathSync(A), JSON.stringify(newestPlus))
 
+  // ---- chats open apps in the background: the open shim leads PATH and is $BROWSER
+  const quiet = await t.newChat(A)
+  await t.waitFor(async () => (await info(quiet)).status === 'idle', { timeout: 10000 })
+  await t.say(quiet, 'quiet')
+  const q = await t.waitFor(async () => (await info(quiet)).feed.join('').match(/quiet: (\S+) first=(\S+)/), { timeout: 8000 })
+  t.check('a chat gets the no-focus "open" shim as $BROWSER and first on PATH', !!q && q[1].endsWith('/quiet-bin/open') && q[2].endsWith('/quiet-bin'), q && q[0])
+  t.check('the shim opens in the background', fs.readFileSync(q[1], 'utf8').includes('open -g "$@"') && (fs.statSync(q[1]).mode & 0o111) !== 0)
 }

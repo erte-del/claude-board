@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Notification, screen, session, she
 import { execFile } from 'node:child_process'
 import { accessSync, constants, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
-import { rename, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, rename, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
@@ -18,6 +18,7 @@ import { badgeText, planLimitReset, planNotifications } from './attention.mts'
 import { CONTEXT_WINDOW } from './pricing.mts'
 import { restoreBounds } from './windowstate.mts'
 import { groupFontFiles } from './fontfiles.mts'
+import { quietEnv, SHIM_SCRIPT } from './quiet.mts'
 import { commonBinDirs, findExecutable, parseEnv0 } from './shellenv.mts'
 import { emptyLayout, type ChatInfo, type Layout, type Status, type SubInfo } from './types'
 
@@ -48,6 +49,8 @@ let claudeBin: string | null = null
 let lastSig = ''
 let confirmedQuit = false
 let notifyOn = true // from settings.json (renderer's "Notify me" toggle)
+let quietLaunch = true // from settings.json: chats open apps and URLs in the background
+let shimOk = true // false if the shim could not be written
 let lastBadge = ''
 let wasLimited = false
 let limitResetAt: number | null = null // when the current limit lifts, if its notice said (applies to every limited chat)
@@ -153,14 +156,24 @@ const notifyChanged = () => {
   send('chats:changed', list)
 }
 
+const shimDir = () => path.join(app.getPath('userData'), 'quiet-bin')
+async function writeShim() { // rewritten at every start so an update to the script reaches existing installs
+  try {
+    await mkdir(shimDir(), { recursive: true })
+    await writeFile(path.join(shimDir(), 'open'), SHIM_SCRIPT)
+    await chmod(path.join(shimDir(), 'open'), 0o755)
+  } catch (e) { log(`quiet shim: ${e}`); shimOk = false; quietLaunch = false } // no shim, no PATH override: chats behave as before
+}
+
 function spawnChat(folder: string, args: string[], sessionId: string, resumed = false): string {
   const dir = resolveDir(folder)
   if (!dir.ok) throw new Error(dir.error)
   const cwd = dir.path // the real path: it is what the chat will report, and so where its transcript is filed
   const id = randomUUID()
-  const env = { ...process.env, ...shellEnv, TERM: 'xterm-256color', COLORTERM: 'truecolor' } as Record<string, string>
+  let env = { ...process.env, ...shellEnv, TERM: 'xterm-256color', COLORTERM: 'truecolor' } as Record<string, string>
   // Don't inherit another Claude session's identity if the app was launched from inside one.
   for (const k of ['CLAUDECODE', 'CLAUDE_PID', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_EXECPATH', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_MESSAGING_SOCKET', 'CLAUDE_CODE_MESSAGING_TOKEN']) delete env[k]
+  if (quietLaunch) env = quietEnv(env, shimDir())
   const claudePath = resolveClaude()
   const p = pty.spawn(claudePath, args, { name: 'xterm-256color', cols: 80, rows: 24, cwd, env })
   log(`start pid=${p.pid} cwd=${cwd} ${args.join(' ')}`)
@@ -363,9 +376,11 @@ ipcMain.handle('listFonts', () => {
   }
   return out
 })
+const setQuiet = (settings: unknown) => { quietLaunch = (settings as { quietLaunch?: boolean } | null)?.quietLaunch !== false && shimOk }
 ipcMain.handle('loadSettings', () => readJson('settings.json'))
 ipcMain.handle('saveSettings', (_e, settings: unknown) => {
   notifyOn = (settings as { notifications?: boolean } | null)?.notifications !== false
+  setQuiet(settings)
   return writeJson('settings.json', settings)
 })
 ipcMain.handle('killChat', (_e, id: string) => {
@@ -450,8 +465,10 @@ function confirmQuit(): boolean {
   return r === 0
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await writeShim()
   notifyOn = (readJson('settings.json') as { notifications?: boolean } | null)?.notifications !== false
+  setQuiet(readJson('settings.json'))
   titles = (readJson('board-layout.json') as { titles?: Record<string, string> } | null)?.titles ?? {}
   loadRegistry()
   // The app itself makes no network requests; this makes sure nothing in the page can either.

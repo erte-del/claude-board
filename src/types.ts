@@ -50,6 +50,7 @@ export type Settings = {
   termFont: number // chat view font size
   termFontFamily: string // chat view font (DEFAULT_TERM_FONT = Terminal.app's SF Mono)
   notifications: boolean // macOS notification + Dock badge when a chat needs you
+  quietLaunch: boolean // apps and URLs a chat opens stay behind the board (applies to chats started after the change)
 }
 export const defaultSettings: Settings = {
   theme: 'dark',
@@ -65,4 +66,5 @@ export const defaultSettings: Settings = {
   termFont: 12,
   termFontFamily: 'Terminal (SF Mono)',
   notifications: true,
+  quietLaunch: true,
 }
