@@ -163,6 +163,8 @@ badge: the number of chats waiting, or `!` while a limit is hit. Nothing is show
 
 **Crashed chats:** a chat whose `claude` exits with an error (not one you killed) gets a **↻ Restart** button that resumes the same session. In Customize, *Restart crashed chats automatically* (off by default) does it for you, at most 3 times in 10 minutes per chat; each restart is written to the log, and after that the button stays.
 
+**Pasting a screenshot:** ⌘V with an image on the clipboard saves it as a file in a temporary folder (`claude-board-paste` in the system temp folder, readable only by you, files older than a day are deleted) and types its path at the prompt, so Claude attaches it, the same as dropping a file. Text on the clipboard pastes as before.
+
 ### Inside a chat
 
 - **Split view:** two chats side by side, each a live terminal. Click a pane to focus it (its header gets an underline and the

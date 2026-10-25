@@ -132,6 +132,22 @@ module.exports = async function (t) {
   await drop(500, 400); await t.sleep(500)
   const typed = t.spy.writes.map((w) => w.data).join('')
   t.check('a file dropped on the terminal types its shell-escaped path as a bracketed paste', typed === `\x1b[200~${t.home}/My\\ Drop\\ \\(1\\).txt \x1b[201~`, JSON.stringify(typed))
+
+  // ---- ⌘V with an image on the clipboard types the path of a saved copy; text still pastes as text
+  { const { clipboard, ClipboardItem } = require('electron')
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([png], { type: 'image/png' }) })])
+    const paste = (kind) => t.js(`(()=>{const dt=new DataTransfer(); ${kind === 'image' ? `dt.items.add(new File([new Uint8Array([1])],'x.png',{type:'image/png'}))` : `dt.setData('text/plain','plain words')`}; const ta=document.querySelector('.pane .xterm-helper-textarea, .xterm-helper-textarea'); ta.dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true})); return true})()`)
+    t.spy.writes.length = 0
+    await paste('image'); await t.sleep(800)
+    const got = t.spy.writes.map((w) => w.data).join('')
+    const m = /^\x1b\[200~(\/\S+\/claude-board-paste\/paste-[0-9a-f-]{36}\.png) \x1b\[201~$/.exec(got)
+    t.check('pasting an image types the path of a saved copy as a bracketed paste', !!m, JSON.stringify(got))
+    t.check('the saved file is the clipboard image (a PNG)', !!m && fs.readFileSync(m[1]).subarray(0, 8).equals(png.subarray(0, 8)))
+    t.check('and only the owner can read it', !!m && (fs.statSync(m[1]).mode & 0o077) === 0)
+    t.spy.writes.length = 0
+    await paste('text'); await t.sleep(500)
+    t.check('plain text still pastes as text', t.spy.writes.map((w) => w.data).join('') === '\x1b[200~plain words\x1b[201~', JSON.stringify(t.spy.writes.map((w) => w.data))) }
   await t.back()
 
   // ---- changing the terminal font changes what is drawn

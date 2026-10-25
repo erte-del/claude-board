@@ -1,14 +1,15 @@
-import { app, BrowserWindow, dialog, ipcMain, Notification, powerSaveBlocker, screen, session, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Notification, powerSaveBlocker, screen, session, shell } from 'electron'
 import { execFile } from 'node:child_process'
-import { accessSync, constants, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
+import { accessSync, constants, mkdirSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
-import { chmod, mkdir, rename, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
 import * as pty from 'node-pty'
 import { Terminal } from '@xterm/headless'
 import { encodeCwd, scanSessions, type SessionInfo } from './scanner.mts'
+import { staleImages } from './pasteimg.mts'
 import { planRestart } from './restart.mts'
 import { openingArgs, resolveDir } from './paths.mts'
 import { sanitizeRegistry, type RegEntry } from './registry.mts'
@@ -408,6 +409,32 @@ function applySettings(settings: unknown) {
   autoResume = o?.autoResume === true
   quietLaunch = o?.quietLaunch !== false && shimOk
 }
+// ⌘V with an image on the clipboard: save it as a PNG/JPEG and hand back its path (the renderer types it, like a dropped file).
+// Read from the clipboard here, never taken from the page, so the page can't make us write arbitrary bytes.
+const pasteDir = () => path.join(os.tmpdir(), 'claude-board-paste')
+async function sweepPasted() {
+  try {
+    const dir = pasteDir()
+    const files = readdirSync(dir).map((name) => ({ name, mtimeMs: statSync(path.join(dir, name)).mtimeMs }))
+    for (const n of staleImages(files, Date.now())) await rm(path.join(dir, n), { force: true })
+  } catch { /* no folder yet */ }
+}
+ipcMain.handle('pasteImage', async () => {
+  try {
+    const item = (await clipboard.read()).find((it) => it.types.some((t) => t === 'image/png' || t === 'image/jpeg'))
+    const type = item?.types.find((t) => t === 'image/png' || t === 'image/jpeg')
+    if (!item || !type) return null
+    const bytes = Buffer.from(await (await item.getType(type)).arrayBuffer())
+    mkdirSync(pasteDir(), { recursive: true, mode: 0o700 })
+    const file = path.join(realpathSync(pasteDir()), `paste-${randomUUID()}.${type === 'image/png' ? 'png' : 'jpg'}`)
+    await writeFile(file, bytes, { mode: 0o600 })
+    void sweepPasted()
+    return file
+  } catch (e) {
+    log(`paste image failed: ${e instanceof Error ? e.stack : e}`)
+    return null
+  }
+})
 ipcMain.handle('loadSettings', () => readJson('settings.json'))
 ipcMain.handle('saveSettings', (_e, settings: unknown) => {
   applySettings(settings)
@@ -496,6 +523,7 @@ function confirmQuit(): boolean {
 }
 
 app.whenReady().then(async () => {
+  void sweepPasted()
   await writeShim()
   applySettings(readJson('settings.json'))
   titles = (readJson('board-layout.json') as { titles?: Record<string, string> } | null)?.titles ?? {}

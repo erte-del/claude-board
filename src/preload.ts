@@ -3,6 +3,7 @@ import type { SessionInfo } from './scanner.mts'
 import type { ChatInfo, Layout, Settings } from './types'
 
 const api = {
+  pasteImage: (): Promise<string | null> => ipcRenderer.invoke('pasteImage'), // saves the clipboard's image, returns its path
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke('pickFolder'),
   resolveDir: (input: string): Promise<{ ok: true; path: string } | { ok: false; error: string }> => ipcRenderer.invoke('resolveDir', input),
   newChat: (cwd: string, prompt?: string): Promise<{ ok: true; id: string } | { ok: false; error: string }> => ipcRenderer.invoke('newChat', cwd, prompt),

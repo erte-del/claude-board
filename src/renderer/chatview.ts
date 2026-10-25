@@ -168,6 +168,14 @@ export function createChatView(d: Deps) {
       focus(pane)
       term.paste(paths.map(shellEscapePath).join(' ') + ' ') // paste (not write) so bracketed-paste mode applies, and Claude can attach an image
     })
+    // ⌘V with an image on the clipboard (a screenshot) types the path of a saved copy, so Claude can attach it. Text still pastes as before.
+    body.addEventListener('paste', (e) => {
+      const cd = e.clipboardData
+      if (!cd || !([...cd.items].some((i) => i.kind === 'file' && i.type.startsWith('image/'))) || cd.getData('text/plain')) return
+      e.preventDefault()
+      e.stopPropagation()
+      void d.api.pasteImage().then((p) => { if (p) { focus(pane); term.paste(shellEscapePath(p) + ' ') } })
+    }, true)
     return pane
   }
 
