@@ -343,4 +343,21 @@ module.exports = async function (t) {
     const unknown = await t.js(`api.openFolder('not-a-chat', 'finder')`)
     t.check('the page can only name a chat and a fixed action, never a path or a command', bad.ok === false && unknown.ok === false && !opened().some((l) => l.includes('sh')), JSON.stringify([bad, unknown]))
     t.check('"Kill chat" in the menu kills it', (await choose('Kill chat')) && !!(await t.waitFor(async () => (await info(mc)).status === 'ended', { timeout: 8000 }))) }
+
+  // ---- stalled hint: working for a while with nothing new in the transcript (threshold shortened to 2.4 s for the test)
+  { const saved = (await t.js('api.loadSettings()')) || {}
+    await t.js(`api.saveSettings(${JSON.stringify({ ...saved, stallMinutes: 0.04 })})`)
+    const w = await t.newChat(A)
+    await t.waitFor(async () => (await info(w)).status === 'idle', { timeout: 8000 })
+    const sid = (await info(w)).sessionId
+    const tag = () => t.js(`(()=>{const c=document.querySelector('.card[data-sid="${sid}"]'); return [c.querySelector('.tps').textContent, c.classList.contains('s-working')]})()`)
+    await t.say(w, 'sleep 9')
+    t.check('a chat that is busy but writes nothing to its transcript gets a "stalled?" hint', !!(await t.waitFor(async () => (await info(w)).stalled === true, { timeout: 8000 })))
+    t.check('the card says so and stays green (working)', !!(await t.waitFor(async () => JSON.stringify(await tag()) === '["stalled?",true]', { timeout: 3000 })), JSON.stringify(await tag()))
+    t.check('the hint goes away once it replies', !!(await t.waitFor(async () => { const c = await info(w); return c.status === 'idle' && c.stalled === false }, { timeout: 15000 })))
+    await t.js(`api.saveSettings(${JSON.stringify({ ...saved, stallMinutes: 0 })})`)
+    await t.say(w, 'sleep 5'); await t.sleep(4000)
+    t.check('with the setting at 0 it never flags', (await info(w)).stalled === false)
+    await t.waitFor(async () => (await info(w)).status === 'idle', { timeout: 10000 })
+    await t.js(`api.saveSettings(${JSON.stringify(saved)})`) }
 }

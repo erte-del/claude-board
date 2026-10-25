@@ -17,6 +17,7 @@ export type ChatInfo = {
   contextTokens: number | null // size of the latest request (what's in the window now)
   contextWindow: number | null // window of that model, if known
   costUSD: number | null // estimated spend, only for models with a verified price
+  stalled: boolean // working for a long time with nothing new in the transcript: a hint, never a colour change
   waitKind: WaitKind | null // while waiting: a tool permission, a question, or the trust dialog (null = unknown, e.g. a tool call in flight)
   crashed: boolean // ended with an error exit (not killed by the user): the card offers Restart
   permMode: PermMode | null // from Claude Code's status line; null until it has been seen
@@ -64,6 +65,7 @@ export type Settings = {
   quietHours: boolean // no notifications between quietStart and quietEnd
   quietStart: number // hour 0–23
   quietEnd: number
+  stallMinutes: number // flag a working chat whose transcript has been silent this long as "stalled?" (0 = off)
   autoResume: boolean // resume crashed chats by themselves, at most 3 times in 10 minutes each
   keepAwake: KeepAwake // stop the Mac from sleeping: never / always / only while a chat is working
 }
@@ -88,5 +90,6 @@ export const defaultSettings: Settings = {
   quietHours: false,
   quietStart: 22,
   quietEnd: 8,
+  stallMinutes: 10,
   autoResume: false,
 }

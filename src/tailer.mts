@@ -199,6 +199,9 @@ export class SubagentWatcher {
     for (const a of this.agents.values()) { a.done = true; a.doneAt = 0 }
   }
 
+  /** When any sub-agent transcript last grew (0 if none): a chat whose helpers are busy isn't stalled. */
+  lastGrowth(): number { return Math.max(0, ...[...this.agents.values()].map((a) => a.tailer.lastGrowth)) }
+
   running(now = Date.now()): SubAgent[] {
     return [...this.agents.values()].filter((a) => (a.done ? now - a.doneAt < LINGER_MS : now - a.tailer.lastGrowth < STALE_MS))
   }

@@ -18,7 +18,7 @@ import { sanitizeRegistry, type RegEntry } from './registry.mts'
 import { SubagentWatcher, Tailer } from './tailer.mts'
 import { modelFromScreen, dialogKind, permissionMode, permissionPrompt, waitingForUser, type PermMode, type WaitKind } from './screen.mts'
 import { createLogger } from './logger.mts'
-import { badgeText, inQuietHours, planContext, planFinished, planLimitReset, planNotifications, wantAwake, type CtxLevel } from './attention.mts'
+import { badgeText, isStalled, inQuietHours, planContext, planFinished, planLimitReset, planNotifications, wantAwake, type CtxLevel } from './attention.mts'
 import { CONTEXT_WINDOW } from './pricing.mts'
 import { restoreBounds } from './windowstate.mts'
 import { groupFontFiles } from './fontfiles.mts'
@@ -43,6 +43,7 @@ type Chat = {
   prev?: Status // status at the previous tick, to spot transitions
   killed: boolean // ended because the user killed it
   seenReply: string | null // last reply already announced (or present before this process started), so "finished" fires once per new reply
+  workingSince: number | null // when the current run of 'working' began
   forked: boolean // started as a fork: its history is copied in when the transcript first appears, and none of it is news
   ctxLevel: CtxLevel | null // context warning level last seen (null = not yet seen)
   waitKind: WaitKind | null // what the dialog blocking this chat is (set each tick while waiting)
@@ -60,6 +61,7 @@ let lastSig = ''
 let confirmedQuit = false
 let notifyOn = true // from settings.json (renderer's "Notify me" toggle)
 let notifyPrefs = { finish: false, sound: false, quiet: false, quietStart: 22, quietEnd: 8 } // from settings.json
+let stallMinutes = 10 // from settings.json: flag a working chat with a silent transcript after this long (0 = never)
 let autoResume = false // from settings.json: resume crashed chats by themselves (a few times, then give up)
 const restarts = new Map<string, number[]>() // sessionId -> recent auto-restart times
 let keepAwake = 'off' // from settings.json: off / always / auto
@@ -139,7 +141,7 @@ const summary = (c: Chat): ChatInfo => {
   // A blocking dialog isn't in the transcript yet, so show what is on screen: that is what the user is being asked.
   const prompt = c.status === 'waiting' ? permissionPrompt(screenBottom(c, 30))?.question ?? null : null
   const feed = c.status === 'waiting' ? dialogText(c, prompt !== null) : t.feed
-  return { id: c.id, cwd: c.cwd, sessionId: c.sessionId, status: c.status, model: t.model ?? bannerModel(c), branch: t.branch ?? c.gitBranch, tps: t.tps, feed: c.endNote ?? feed, subagents: subagentsOf(c), ...usageOf(t, c.subs), limitResetAt: c.status === 'limit' ? limitResetAt : null, permMode: c.permMode, waitKind: c.waitKind, crashed: c.crashed, prompt, resumable: c.status === 'ended' && c.tailer.exists }
+  return { id: c.id, cwd: c.cwd, sessionId: c.sessionId, status: c.status, model: t.model ?? bannerModel(c), branch: t.branch ?? c.gitBranch, tps: t.tps, feed: c.endNote ?? feed, subagents: subagentsOf(c), ...usageOf(t, c.subs), limitResetAt: c.status === 'limit' ? limitResetAt : null, permMode: c.permMode, waitKind: c.waitKind, stalled: c.status === 'working' && isStalled({ status: c.status, workingSince: c.workingSince, lastGrowth: Math.max(c.tailer.lastGrowth, c.subs.lastGrowth()) }, Date.now(), stallMinutes), crashed: c.crashed, prompt, resumable: c.status === 'ended' && c.tailer.exists }
 }
 
 // A running sub-agent is working by definition; it is only "waiting" when the parent is blocked on a dialog and this one has a pending tool.
@@ -164,7 +166,7 @@ function usageOf(t: Tailer['state'], subs: SubagentWatcher) {
 
 const dormantInfo = (d: Dormant): ChatInfo => {
   const t = d.tailer.state
-  return { id: d.id, cwd: d.cwd, sessionId: d.sessionId, status: 'ended', model: t.model, branch: t.branch, tps: t.tps, feed: t.feed.slice(-4), subagents: [], ...usageOf(t, d.subs), limitResetAt: null, permMode: null, waitKind: null, crashed: false, prompt: null, resumable: true }
+  return { id: d.id, cwd: d.cwd, sessionId: d.sessionId, status: 'ended', model: t.model, branch: t.branch, tps: t.tps, feed: t.feed.slice(-4), subagents: [], ...usageOf(t, d.subs), limitResetAt: null, permMode: null, waitKind: null, stalled: false, crashed: false, prompt: null, resumable: true }
 }
 const allInfos = () => [...chats.values()].map(summary).concat([...dormant.values()].map(dormantInfo))
 const notifyChanged = () => {
@@ -195,7 +197,7 @@ function spawnChat(folder: string, args: string[], sessionId: string, resumed = 
   const p = pty.spawn(claudePath, args, { name: 'xterm-256color', cols: 80, rows: 24, cwd, env })
   log(`start pid=${p.pid} cwd=${cwd} ${args.join(' ')}`)
   const file = transcriptFile(cwd, sessionId)
-  const chat: Chat = { id, pty: p, cwd, sessionId, status: 'working', buffer: '', lastData: Date.now(), lastInput: 0, tailer: new Tailer(file), subs: new SubagentWatcher(path.join(path.dirname(file), sessionId, 'subagents')), screen: new Terminal({ cols: 80, rows: 24, allowProposedApi: true }), gitBranch: null, killed: false, seenReply: null, forked: false, ctxLevel: null, waitKind: null, crashed: false, endNote: null, screenModel: null, permMode: null, prev: undefined }
+  const chat: Chat = { id, pty: p, cwd, sessionId, status: 'working', buffer: '', lastData: Date.now(), lastInput: 0, tailer: new Tailer(file), subs: new SubagentWatcher(path.join(path.dirname(file), sessionId, 'subagents')), screen: new Terminal({ cols: 80, rows: 24, allowProposedApi: true }), gitBranch: null, killed: false, seenReply: null, workingSince: null, forked: false, ctxLevel: null, waitKind: null, crashed: false, endNote: null, screenModel: null, permMode: null, prev: undefined }
   if (resumed) { chat.tailer.catchUp(); chat.subs.catchUp() } // history is shown; its stale limit / pending-tool state is not
   // Branch for the card before the first transcript entry exists.
   execFile('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], (err, out) => { if (!err) chat.gitBranch = out.trim() })
@@ -335,6 +337,7 @@ function tick() {
       : waitingForUser(screenBottom(c)) || c.tailer.state.pending.size > 0 ? 'waiting'
       : 'idle'
   }
+  for (const c of live) c.workingSince = c.status === 'working' ? (c.workingSince ?? Date.now()) : null
   for (const c of live) c.waitKind = c.status === 'waiting' ? dialogKind(screenBottom(c, 30)) : null
   for (const c of live) c.permMode = permissionMode(screenBottom(c, 6)) ?? c.permMode
   attend(live, limited)
@@ -466,10 +469,11 @@ ipcMain.handle('listFonts', () => {
   return out
 })
 function applySettings(settings: unknown) {
-  const o = settings as { finishNotify?: boolean; waitingSound?: boolean; quietHours?: boolean; quietStart?: number; quietEnd?: number; autoResume?: boolean; notifications?: boolean; keepAwake?: string; quietLaunch?: boolean } | null
+  const o = settings as { stallMinutes?: number; finishNotify?: boolean; waitingSound?: boolean; quietHours?: boolean; quietStart?: number; quietEnd?: number; autoResume?: boolean; notifications?: boolean; keepAwake?: string; quietLaunch?: boolean } | null
   notifyOn = o?.notifications !== false
   keepAwake = o?.keepAwake ?? 'off'
   autoResume = o?.autoResume === true
+  stallMinutes = typeof o?.stallMinutes === 'number' && o.stallMinutes >= 0 && o.stallMinutes <= 600 ? o.stallMinutes : 10
   const hour = (v: unknown, d: number) => (Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 23 ? (v as number) : d)
   notifyPrefs = { finish: o?.finishNotify === true, sound: o?.waitingSound === true, quiet: o?.quietHours === true, quietStart: hour(o?.quietStart, 22), quietEnd: hour(o?.quietEnd, 8) }
   quietLaunch = o?.quietLaunch !== false && shimOk

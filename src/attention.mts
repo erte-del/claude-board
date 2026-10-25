@@ -101,3 +101,12 @@ export function planContext(chats: CtxChat[], opts: { enabled: boolean; watching
   }
   return { plans, levels }
 }
+
+/**
+ * A chat that has looked busy for `minutes` without anything new reaching its transcript (or its sub-agents') may be hung on a dead
+ * request. Only a hint: a long build or test run looks the same. 0 (or less) turns it off.
+ */
+export function isStalled(c: { status: AttnStatus; workingSince: number | null; lastGrowth: number }, now: number, minutes: number): boolean {
+  if (!(minutes > 0) || c.status !== 'working' || c.workingSince === null) return false
+  return now - Math.max(c.workingSince, c.lastGrowth) > minutes * 60_000
+}

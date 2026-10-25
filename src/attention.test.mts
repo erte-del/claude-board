@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { badgeText, contextLevel, planContext, firstLine, inQuietHours, planFinished, wantAwake, planLimitReset, planNotifications, type AttnChat } from './attention.mts'
+import { isStalled, badgeText, contextLevel, planContext, firstLine, inQuietHours, planFinished, wantAwake, planLimitReset, planNotifications, type AttnChat } from './attention.mts'
 
 const chat = (o: Partial<AttnChat> & { id: string }): AttnChat => ({ cwd: '/p/proj', status: 'idle', detail: '', ...o })
 const away = { enabled: true, watching: () => false }
@@ -135,4 +135,16 @@ test('context warnings: not at first sight, not when off or watched, but the lev
   assert.equal(off.levels.get('a'), 1)
   assert.equal(planContext([{ id: 'a', cwd: '/p/proj', pct: 90, level: 0 }], { enabled: true, watching: () => true }).plans.length, 0)
   assert.equal(planContext([{ id: 'a', cwd: '/p/proj', pct: null, level: null }], { enabled: true, watching: () => false }).levels.get('a'), 0)
+})
+
+test('stalled: working for N minutes with nothing new in the transcript', () => {
+  const min = 60_000
+  const c = (o = {}) => ({ status: 'working' as const, workingSince: 0, lastGrowth: 0, ...o })
+  assert.equal(isStalled(c(), 11 * min, 10), true)
+  assert.equal(isStalled(c(), 9 * min, 10), false) // not long enough
+  assert.equal(isStalled(c({ lastGrowth: 8 * min }), 11 * min, 10), false) // the transcript grew 3 minutes ago
+  assert.equal(isStalled(c({ workingSince: 5 * min }), 11 * min, 10), false) // only working for 6 minutes
+  assert.equal(isStalled(c({ status: 'idle' as never }), 99 * min, 10), false)
+  assert.equal(isStalled(c({ workingSince: null }), 99 * min, 10), false)
+  assert.equal(isStalled(c(), 99 * min, 0), false) // switched off
 })

@@ -1,7 +1,7 @@
 import { closePicker, openPicker } from './colorpicker'
 import { DEFAULT_TERM_FONT, defaultSettings, type KeepAwake, type Settings, type StateKey, type Theme } from '../types'
 
-type NumKey = 'quietStart' | 'quietEnd' | 'cardW' | 'cardH' | 'radius' | 'cardFont' | 'lineWidth' | 'termFont'
+type NumKey = 'stallMinutes' | 'quietStart' | 'quietEnd' | 'cardW' | 'cardH' | 'radius' | 'cardFont' | 'lineWidth' | 'termFont'
 type BoolKey = 'curved' | 'grid' | 'motion' | 'notifications' | 'finishNotify' | 'waitingSound' | 'quietHours' | 'autoResume' | 'quietLaunch'
 
 const STATES: [StateKey, string][] = [['working', 'Working'], ['idle', 'Idle'], ['waiting', 'Waiting for you'], ['limit', 'Limit hit'], ['ended', 'Ended']]
@@ -127,6 +127,7 @@ export function createSettings(panel: HTMLElement, initial: Settings, onChange: 
         slider('Quiet until', 'quietEnd', 0, 23, 1, ':00'),
         toggle('Chats open apps in the background (new chats)', 'quietLaunch'),
         segmented<KeepAwake>('Keep Mac awake', [['off', 'Off'], ['auto', 'When working'], ['always', 'Always']], () => s.keepAwake, (v) => { s = { ...s, keepAwake: v } }),
+        slider('Flag a chat as stalled after (0 = never)', 'stallMinutes', 0, 60, 5, ' min'),
         toggle('Restart crashed chats automatically', 'autoResume'),
         toggle('Smooth motion', 'motion'),
         fontSelect(),

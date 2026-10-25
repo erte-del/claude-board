@@ -518,6 +518,9 @@ export function createBoard(root: HTMLElement, h: Handlers) {
       if (c.status === 'waiting' && c.waitKind) { // in place of tokens/s: what it wants
         e.tps.textContent = TAG[c.waitKind]
         e.tps.title = ALERT[c.waitKind]
+      } else if (c.stalled) { // working, but nothing new in the transcript for a long time; the colour stays green
+        e.tps.textContent = 'stalled?'
+        e.tps.title = 'Looks busy but nothing new has reached its transcript for a while. It may be a long command, or hung.'
       } else if (c.status === 'limit') { // in place of tokens/s: how long until the limit lifts
         e.tps.textContent = c.limitResetAt ? `↻ ${formatCountdown(c.limitResetAt - Date.now())}` : 'limit'
         e.tps.title = c.limitResetAt ? `Limit lifts ${new Date(c.limitResetAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : 'Usage limit reached'
