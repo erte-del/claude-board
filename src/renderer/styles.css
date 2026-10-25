@@ -81,6 +81,15 @@ button.ghost:hover { background: var(--btn-hover); }
 #filter:focus { border-color: var(--accent); }
 #filter::placeholder { color: var(--muted); }
 #filter::-webkit-search-cancel-button { display: none; }
+#chips { display: flex; gap: 4px; margin-left: 8px; }
+.chip { height: 24px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); font: 11px var(--font-ui); cursor: pointer; }
+.chip:hover { color: var(--fg); }
+.chip.on { color: var(--fg); background: var(--btn); border-color: var(--chip, var(--accent)); }
+.chip[data-status="working"] { --chip: var(--c-working); }
+.chip[data-status="waiting"] { --chip: var(--c-waiting); }
+.chip[data-status="idle"] { --chip: var(--c-idle); }
+.chip[data-status="limit"] { --chip: var(--c-limit); }
+.chip[data-status="ended"] { --chip: var(--c-ended); }
 #filter-count { color: var(--muted); font-size: 12px; min-width: 44px; font-variant-numeric: tabular-nums; }
 button.toggle { padding: 4px 10px; font-size: 12px; }
 button.toggle.on { background: var(--accent); border-color: transparent; color: #fff; }

@@ -190,14 +190,25 @@ const drawer = createSettings($('settings'), settings, onSettings)
 fontsReady.then((list) => drawer.setFonts(list)).catch(() => {})
 // ---- filter: type to dim the chats that don't match; Enter jumps to the next match; the toggle hides ended chats
 const filter = $<HTMLInputElement>('filter'), filterCount = $('filter-count'), hideEnded = $('hide-ended')
+const chipsOn = new Set<string>()
 function refreshCount() {
-  if (!filter.value.trim()) { filterCount.textContent = ''; return }
+  if (!filter.value.trim() && !chipsOn.size) { filterCount.textContent = ''; return }
   const { matches, total } = board.counts()
   filterCount.textContent = `${matches} of ${total}`
 }
 function syncHideEnded() {
   hideEnded.classList.toggle('on', board.hideEnded())
   hideEnded.setAttribute('aria-pressed', String(board.hideEnded()))
+}
+for (const chip of document.querySelectorAll<HTMLButtonElement>('#chips .chip')) {
+  chip.onclick = () => {
+    const s = chip.dataset.status!
+    if (chipsOn.has(s)) chipsOn.delete(s); else chipsOn.add(s)
+    chip.classList.toggle('on', chipsOn.has(s))
+    chip.setAttribute('aria-pressed', String(chipsOn.has(s)))
+    board.setStatuses([...chipsOn])
+    refreshCount()
+  }
 }
 filter.oninput = () => { board.setQuery(filter.value); refreshCount() }
 filter.onkeydown = (e) => {

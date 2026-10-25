@@ -1,7 +1,7 @@
 import { formatTokens, formatUsd } from '../pricing.mts'
 import { hubSpot, ringOffset, type Placed } from '../placement.mts'
 import { formatCountdown } from '../reset.mts'
-import { matches } from '../filter.mts'
+import { matches, statusMatches } from '../filter.mts'
 import type { PermMode } from '../screen.mts'
 import { cycle, nextInDirection, type Dir } from '../nav.mts'
 import { emptyLayout, type ChatInfo, type Layout, type Pt, type SubInfo } from '../types'
@@ -70,6 +70,7 @@ export function createBoard(root: HTMLElement, h: Handlers) {
   let saveTimer = 0
   let editing: string | null = null // sessionId of the card being renamed
   let query = '' // board filter text (not saved)
+  let statuses = new Set<string>() // status chips that are on (not saved); none = every status
   let selected: string | null = null // keyboard-selected card (sessionId)
   const cards = new Map<string, CardEls>()
   const hubs = new Map<string, HTMLElement>()
@@ -86,7 +87,8 @@ export function createBoard(root: HTMLElement, h: Handlers) {
   // ---- filter: collapsed folders and "hide ended" remove cards; the search text dims the cards that don't match
   const isVisible = (c: ChatInfo) => !layout.collapsed[c.cwd] && !(layout.hideEnded && c.status === 'ended')
   const searchable = (c: ChatInfo) => [layout.titles[c.sessionId], base(c.cwd), c.cwd, c.model, c.branch, ...c.feed, ...c.subagents.flatMap((s) => [s.title, ...s.feed])]
-  const isMatch = (c: ChatInfo) => matches(query, searchable(c))
+  const filtering = () => query !== '' || statuses.size > 0
+  const isMatch = (c: ChatInfo) => matches(query, searchable(c)) && statusMatches(statuses, c.status)
   const shown = () => chats.filter(isVisible)
 
   // ---- layout: folder hub in the middle, its chats on a ring. Positions are stored the first time they are chosen.
@@ -380,7 +382,7 @@ export function createBoard(root: HTMLElement, h: Handlers) {
       hub.children[0].textContent = folded ? '▸' : '▾'
       hub.children[2].textContent = hidden ? `+${hidden}` : ''
       hub.title = `${cwd}\n${folded ? 'Click to show its chats' : 'Click to fold its chats away'}`
-      hub.classList.toggle('dim', query !== '' && !mine.some((c) => isVisible(c) && isMatch(c)))
+      hub.classList.toggle('dim', filtering() && !mine.some((c) => isVisible(c) && isMatch(c)))
       if (fresh) settle(hub)
     }
     for (const [cwd, hub] of hubs) if (!groups.has(cwd)) { hub.remove(); hubs.delete(cwd) }
@@ -400,7 +402,7 @@ export function createBoard(root: HTMLElement, h: Handlers) {
       e.card.classList.toggle('has-subs', c.subagents.length > 0)
       for (const cls of [...e.card.classList]) if (cls.startsWith('s-')) e.card.classList.remove(cls)
       e.card.classList.add(`s-${c.status}`)
-      const vis = isVisible(c), dim = query !== '' && !isMatch(c)
+      const vis = isVisible(c), dim = filtering() && !isMatch(c)
       e.card.classList.toggle('gone', !vis)
       e.card.classList.toggle('dim', vis && dim)
       e.card.classList.toggle('sel', selected === c.sessionId && vis)
@@ -532,6 +534,7 @@ export function createBoard(root: HTMLElement, h: Handlers) {
     showKeys(on: boolean) { root.classList.toggle('show-keys', on) },
     // ---- filter
     setQuery(q: string) { query = q; schedule() },
+    setStatuses(list: string[]) { statuses = new Set(list); schedule() },
     setHideEnded(on: boolean) { layout.hideEnded = on; save(); schedule() },
     hideEnded() { return layout.hideEnded },
     /** How many visible cards match the filter, out of all visible cards. */

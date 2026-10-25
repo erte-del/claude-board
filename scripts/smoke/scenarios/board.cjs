@@ -54,6 +54,19 @@ module.exports = async function (t) {
   await t.js(`document.getElementById('filter').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`); await settle()
   t.check('Esc clears the filter', (await t.js(`document.getElementById('filter').value`)) === '' && !(await cards()).some((c) => c.includes('dim')))
 
+  // ---- status chips
+  const dimmed = async () => (await cards()).filter((c) => c.includes('dim')).length
+  const chip = (s) => t.click(`#chips .chip[data-status="${s}"]`)
+  t.check('no chip is on at the start, and no card is dimmed', (await t.js(`document.querySelectorAll('#chips .chip.on').length`)) === 0 && (await dimmed()) === 0)
+  await chip('working'); await settle()
+  t.check('the Working chip dims everything that is not working and counts 2 of 6', (await dimmed()) === 4 && (await t.text('#filter-count')) === '2 of 6' && (await t.js(`document.querySelector('#chips .chip[data-status="working"]').getAttribute('aria-pressed')`)) === 'true', `${await dimmed()} ${await t.text('#filter-count')}`)
+  await chip('waiting'); await settle()
+  t.check('chips combine: Working + Waiting shows 3 of 6', (await dimmed()) === 3 && (await t.text('#filter-count')) === '3 of 6', `${await dimmed()} ${await t.text('#filter-count')}`)
+  await t.js(`(()=>{const f=document.getElementById('filter'); f.value='restart'; f.dispatchEvent(new Event('input',{bubbles:true}))})()`); await settle()
+  t.check('and they narrow the text filter (only chat 1 is both working and about "restart")', (await t.text('#filter-count')) === '1 of 6' && (await dimmed()) === 5, `${await dimmed()} ${await t.text('#filter-count')}`)
+  await t.js(`document.getElementById('filter').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`); await chip('working'); await chip('waiting'); await settle()
+  t.check('turning the chips off brings every card back', (await dimmed()) === 0 && (await t.text('#filter-count')) === '')
+
   // ---- hide ended, fold a folder
   await t.click('#hide-ended'); await settle()
   t.check('"Hide ended" hides the gray card', (await cards())[3].includes('gone') && (await cards()).filter((c) => c.includes('gone')).length === 1)

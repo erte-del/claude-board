@@ -163,6 +163,8 @@ badge: the number of chats waiting, or `!` while a limit is hit. Nothing is show
 
 **Undo remove:** ✕ on a gray (ended or restored) card removes it from the board and shows *Removed … · Undo* for a few seconds. ⌘Z on the board brings back the most recently removed card, then the one before, and so on (the last 500 are remembered across restarts in `removed.json`). A card comes back gray and resumable with its old name and place; one whose Claude Code transcript has since been deleted can't come back. ✕ on a running chat still just kills it.
 
+**Status chips:** next to the filter box, *Working / Waiting / Idle / Limit / Ended* chips show only chats in those states (several can be on; with none on, everything shows). They combine with the text filter and dim the other cards, like the text filter does. They are not remembered between launches.
+
 **More notification options** (Customize): *Also notify when a chat finishes* (off by default) shows the first line of Claude's last reply when a chat goes from working to idle, except for the chat you're looking at; the 🔔 on a card (hover it) mutes that one chat. *Sound with that notification* plays a sound for "needs you" notifications; with it off they are silent. *Quiet hours* silences every notification between two hours (the Dock badge still updates).
 
 **Keep Mac awake** (Customize → Off / When working / Always) stops the Mac from sleeping, so long chats aren't cut off. "When working" only holds it while a chat is producing output. It is off by default; the display may still sleep.

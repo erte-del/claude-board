@@ -12,6 +12,13 @@
         <h1>Claude Board</h1>
         <input id="filter" type="search" spellcheck="false" placeholder="Filter chats   ⌘F" />
         <span id="filter-count"></span>
+        <span id="chips" role="group" aria-label="Show only chats that are">
+          <button class="chip" data-status="working" aria-pressed="false">Working</button>
+          <button class="chip" data-status="waiting" aria-pressed="false">Waiting</button>
+          <button class="chip" data-status="idle" aria-pressed="false">Idle</button>
+          <button class="chip" data-status="limit" aria-pressed="false">Limit</button>
+          <button class="chip" data-status="ended" aria-pressed="false">Ended</button>
+        </span>
         <button id="hide-ended" class="toggle" aria-pressed="false" title="Hide gray (ended or restored) chats">Hide ended</button>
         <span class="spacer"></span>
         <button id="arrange" class="icon" title="Auto-arrange the board (⌘⇧A)"></button>
