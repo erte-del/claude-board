@@ -4,7 +4,7 @@
 //   npm run smoke            all scenarios      npm run smoke -- --fast     skip the slow ones
 //   npm run smoke -- chat    only matching names   npm run smoke -- --keep   keep the temp folder
 import { spawn, execFileSync } from 'node:child_process'
-import { chmodSync, closeSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, closeSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -25,6 +25,23 @@ const SCENARIOS = [
   { name: 'persist-2' },
   { name: 'limit', slow: true },
 ]
+
+// Two runs at once (another terminal, another chat) steal each other's window focus and see each other's stand-in claude processes,
+// which fails checks at random. One lock file (holding the owner's pid) makes the second run wait its turn.
+const lock = path.join(os.tmpdir(), 'claude-board-smoke.lock')
+const alive = (pid) => { try { process.kill(pid, 0); return true } catch { return false } }
+for (let waited = false; ; waited = true) {
+  try { writeFileSync(lock, String(process.pid), { flag: 'wx' }); break } catch {
+    let owner = 0
+    try { owner = Number(readFileSync(lock, 'utf8')) } catch { /* released just now */ }
+    if (owner && !alive(owner)) { rmSync(lock, { force: true }); continue }
+    if (!waited) console.log(`another smoke run (pid ${owner}) is using the app: waiting for it to finish…`)
+    await new Promise((r) => setTimeout(r, 2000))
+  }
+}
+const unlock = () => { try { if (Number(readFileSync(lock, 'utf8')) === process.pid) rmSync(lock, { force: true }) } catch { /* already gone */ } }
+process.on('exit', unlock)
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(130))
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), 'cb-smoke-'))
 // every scenario gets its own HOME and data folder; "persist-1" and "persist-2" share one (the second is a restart of the first)
@@ -167,7 +184,9 @@ for (const s of picked) await runScenario(s.name, !!s.strictQuit)
 if (wantsDock) await dockStage()
 
 // leftovers would mean a quit left a chat running
-const strays = (() => { try { return execFileSync('pgrep', ['-f', `${smoke}/bin/claude`]).toString().trim().split('\n').filter(Boolean).length } catch { return 0 } })()
+const countStrays = () => { try { return execFileSync('pgrep', ['-f', `${smoke}/bin/claude`]).toString().trim().split('\n').filter(Boolean).length } catch { return 0 } }
+for (let i = 0; i < 10 && countStrays(); i++) await new Promise((r) => setTimeout(r, 300)) // a SIGHUPed process needs a moment to go
+const strays = countStrays()
 if (strays) { failed++; failures.push('cleanup: stand-in claude processes left running'); console.log(`\n  ${red('✖')} ${strays} stand-in claude process(es) left running after the app quit`); try { execFileSync('pkill', ['-f', `${smoke}/bin/claude`]) } catch {} }
 
 console.log(`\n${failed ? red(`${failed} failed`) : green('all passed')}, ${passed} checks ok  ${dim(`(${Math.round((Date.now() - started) / 1000)}s)`)}`)

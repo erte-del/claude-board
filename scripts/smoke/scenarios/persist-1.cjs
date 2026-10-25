@@ -25,9 +25,10 @@ module.exports = async function (t) {
 
   // a name, an added history chat
   await t.js(`document.querySelectorAll('.card')[0].dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:300,clientY:300}))`); await t.sleep(300)
-  await t.js(`[...document.querySelectorAll('.ctxmenu button')].find(b=>b.textContent==='Rename').click()`); await t.sleep(500)
-  await t.js(`(()=>{const i=document.querySelectorAll('.card')[0].querySelector('.name-input'); i.value='Keep me'; i.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))})()`); await t.sleep(600)
-  t.check('the chat is renamed', (await t.text('.card .name', 0)) === 'Keep me')
+  await t.js(`[...document.querySelectorAll('.ctxmenu button')].find(b=>b.textContent==='Rename').click()`)
+  await t.waitFor(() => t.js(`!document.querySelectorAll('.card')[0].querySelector('.name-input').hidden`), { timeout: 4000 })
+  await t.js(`(()=>{const i=document.querySelectorAll('.card')[0].querySelector('.name-input'); i.value='Keep me'; i.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))})()`)
+  t.check('the chat is renamed', !!(await t.waitFor(async () => (await t.text('.card .name', 0)) === 'Keep me', { timeout: 4000 })))
   await t.key('KeyO', { meta: true, key: 'o' })
   t.check('⌘O lists the old chat from Claude Code\'s history', !!(await t.waitFor(() => t.js(`[...document.querySelectorAll('.result b')].some(b=>b.textContent==='Invoices chat')`), { timeout: 6000 })))
   await t.js(`(()=>{const s=document.getElementById('search'); s.value='invoices'; s.dispatchEvent(new Event('input',{bubbles:true}))})()`); await t.sleep(400)
