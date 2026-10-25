@@ -1,5 +1,5 @@
 import { closePicker, openPicker } from './colorpicker'
-import { DEFAULT_TERM_FONT, defaultSettings, type Settings, type StateKey, type Theme } from '../types'
+import { DEFAULT_TERM_FONT, defaultSettings, type KeepAwake, type Settings, type StateKey, type Theme } from '../types'
 
 type NumKey = 'cardW' | 'cardH' | 'radius' | 'cardFont' | 'lineWidth' | 'termFont'
 type BoolKey = 'curved' | 'grid' | 'motion' | 'notifications' | 'quietLaunch'
@@ -121,6 +121,7 @@ export function createSettings(panel: HTMLElement, initial: Settings, onChange: 
       section('Other',
         toggle('Notify me when a chat needs me', 'notifications'),
         toggle('Chats open apps in the background (new chats)', 'quietLaunch'),
+        segmented<KeepAwake>('Keep Mac awake', [['off', 'Off'], ['auto', 'When working'], ['always', 'Always']], () => s.keepAwake, (v) => { s = { ...s, keepAwake: v } }),
         toggle('Smooth motion', 'motion'),
         fontSelect(),
         slider('Terminal text', 'termFont', 10, 18, 1)),

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { badgeText, planLimitReset, planNotifications, type AttnChat } from './attention.mts'
+import { badgeText, wantAwake, planLimitReset, planNotifications, type AttnChat } from './attention.mts'
 
 const chat = (o: Partial<AttnChat> & { id: string }): AttnChat => ({ cwd: '/p/proj', status: 'idle', detail: '', ...o })
 const away = { enabled: true, watching: () => false }
@@ -57,4 +57,11 @@ test('dock badge: limit beats waiting count beats nothing', () => {
   assert.equal(badgeText([{ status: 'waiting' }, { status: 'idle' }, { status: 'waiting' }]), '2')
   assert.equal(badgeText([{ status: 'waiting' }, { status: 'limit' }]), '!')
   assert.equal(badgeText([]), '')
+})
+
+test('keep awake: off never, always always, auto only while a chat is working', () => {
+  const w = [{ status: 'working' as const }], idle = [{ status: 'idle' as const }, { status: 'waiting' as const }, { status: 'limit' as const }]
+  assert.deepEqual([wantAwake('off', w), wantAwake(undefined, w), wantAwake('bogus', w)], [false, false, false])
+  assert.deepEqual([wantAwake('always', []), wantAwake('always', idle)], [true, true])
+  assert.deepEqual([wantAwake('auto', w), wantAwake('auto', idle), wantAwake('auto', [])], [true, false, false])
 })

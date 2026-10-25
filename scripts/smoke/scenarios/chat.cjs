@@ -31,6 +31,21 @@ module.exports = async function (t) {
   t.check('status is "working" while the chat produces output', !!(await t.waitFor(async () => (await info(id)).status === 'working', { timeout: 4000, every: 150 })))
   t.check('and returns to idle afterwards', !!(await t.waitFor(async () => (await info(id)).status === 'idle', { timeout: 12000 })))
 
+  // ---- keep-awake: set through the real Customize control, observed on Electron's powerSaveBlocker
+  { const { powerSaveBlocker } = require('electron')
+    const blocking = () => { for (let i = 0; i < 100; i++) if (powerSaveBlocker.isStarted(i)) return true; return false }
+    const pick = async (label) => { await t.js(`(()=>{const r=[...document.querySelectorAll('#settings .row')].find(r=>r.textContent.startsWith('Keep Mac awake')); [...r.querySelectorAll('button')].find(b=>b.textContent===${JSON.stringify(label)}).click()})()`) }
+    await t.key('Comma', { meta: true, key: ',' }); await t.sleep(400)
+    t.check('keep awake is off by default: no blocker while idle', !blocking())
+    await pick('When working'); await t.sleep(900)
+    t.check('"When working" holds no blocker while the chat is idle', !blocking())
+    await t.say(id, 'sleep 3')
+    t.check('"When working" blocks sleep while a chat works', !!(await t.waitFor(blocking, { timeout: 4000, every: 150 })))
+    t.check('and releases it when the chat goes idle', !!(await t.waitFor(() => !blocking(), { timeout: 12000 })))
+    await pick('Always'); t.check('"Always" blocks sleep even when idle', !!(await t.waitFor(blocking, { timeout: 3000 })))
+    await pick('Off'); t.check('"Off" releases it', !!(await t.waitFor(() => !blocking(), { timeout: 3000 })))
+    await t.key('Escape', { key: 'Escape' }); await t.sleep(300) }
+
   // ---- a blocking question: waiting + dialog text + dock badge + alert badge; answering clears it
   await t.say(id, 'ask')
   const waiting = await t.waitFor(async () => (await info(id)).status === 'waiting', { timeout: 8000 })

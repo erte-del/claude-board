@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Notification, screen, session, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Notification, powerSaveBlocker, screen, session, shell } from 'electron'
 import { execFile } from 'node:child_process'
 import { accessSync, constants, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
@@ -14,7 +14,7 @@ import { sanitizeRegistry, type RegEntry } from './registry.mts'
 import { SubagentWatcher, Tailer } from './tailer.mts'
 import { modelFromScreen, permissionPrompt, waitingForUser } from './screen.mts'
 import { createLogger } from './logger.mts'
-import { badgeText, planLimitReset, planNotifications } from './attention.mts'
+import { badgeText, planLimitReset, planNotifications, wantAwake } from './attention.mts'
 import { CONTEXT_WINDOW } from './pricing.mts'
 import { restoreBounds } from './windowstate.mts'
 import { groupFontFiles } from './fontfiles.mts'
@@ -49,8 +49,10 @@ let claudeBin: string | null = null
 let lastSig = ''
 let confirmedQuit = false
 let notifyOn = true // from settings.json (renderer's "Notify me" toggle)
+let keepAwake = 'off' // from settings.json: off / always / auto
 let quietLaunch = true // from settings.json: chats open apps and URLs in the background
 let shimOk = true // false if the shim could not be written
+let blockerId: number | null = null
 let lastBadge = ''
 let wasLimited = false
 let limitResetAt: number | null = null // when the current limit lifts, if its notice said (applies to every limited chat)
@@ -274,7 +276,13 @@ function tick() {
       : 'idle'
   }
   attend(live, limited)
+  setAwake(wantAwake(keepAwake, live))
   if (JSON.stringify(allInfos()) !== lastSig) notifyChanged()
+}
+
+function setAwake(on: boolean) {
+  if (on && blockerId === null) blockerId = powerSaveBlocker.start('prevent-app-suspension')
+  else if (!on && blockerId !== null) { powerSaveBlocker.stop(blockerId); blockerId = null }
 }
 
 // Tell the user when a chat needs them while they're elsewhere: a notification (click opens that chat) and a Dock badge.
@@ -376,11 +384,15 @@ ipcMain.handle('listFonts', () => {
   }
   return out
 })
-const setQuiet = (settings: unknown) => { quietLaunch = (settings as { quietLaunch?: boolean } | null)?.quietLaunch !== false && shimOk }
+function applySettings(settings: unknown) {
+  const o = settings as { notifications?: boolean; keepAwake?: string; quietLaunch?: boolean } | null
+  notifyOn = o?.notifications !== false
+  keepAwake = o?.keepAwake ?? 'off'
+  quietLaunch = o?.quietLaunch !== false && shimOk
+}
 ipcMain.handle('loadSettings', () => readJson('settings.json'))
 ipcMain.handle('saveSettings', (_e, settings: unknown) => {
-  notifyOn = (settings as { notifications?: boolean } | null)?.notifications !== false
-  setQuiet(settings)
+  applySettings(settings)
   return writeJson('settings.json', settings)
 })
 ipcMain.handle('killChat', (_e, id: string) => {
@@ -467,8 +479,7 @@ function confirmQuit(): boolean {
 
 app.whenReady().then(async () => {
   await writeShim()
-  notifyOn = (readJson('settings.json') as { notifications?: boolean } | null)?.notifications !== false
-  setQuiet(readJson('settings.json'))
+  applySettings(readJson('settings.json'))
   titles = (readJson('board-layout.json') as { titles?: Record<string, string> } | null)?.titles ?? {}
   loadRegistry()
   // The app itself makes no network requests; this makes sure nothing in the page can either.

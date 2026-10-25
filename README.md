@@ -155,6 +155,8 @@ what it is asking; clicking it opens that chat. A usage limit gives one notifica
 badge: the number of chats waiting, or `!` while a limit is hit. Nothing is shown for a chat you are already looking at
 (window focused, on the board or inside that chat). Turn it off in Customize (⌘,) → **Notify me when a chat needs me**.
 
+**Keep Mac awake** (Customize → Off / When working / Always) stops the Mac from sleeping, so long chats aren't cut off. "When working" only holds it while a chat is producing output. It is off by default; the display may still sleep.
+
 ### Inside a chat
 
 - **Split view:** two chats side by side, each a live terminal. Click a pane to focus it (its header gets an underline and the

@@ -36,6 +36,7 @@ export const emptyLayout = (): Layout => ({ clusters: {}, cards: {}, titles: {},
 export const DEFAULT_TERM_FONT = 'Terminal (SF Mono)'
 export type Theme = 'dark' | 'light' | 'midnight'
 export type StateKey = 'working' | 'idle' | 'waiting' | 'limit' | 'ended'
+export type KeepAwake = 'off' | 'always' | 'auto'
 export type Settings = {
   theme: Theme
   colors: Record<StateKey, string> // outline / dot / line colour per status
@@ -51,6 +52,7 @@ export type Settings = {
   termFontFamily: string // chat view font (DEFAULT_TERM_FONT = Terminal.app's SF Mono)
   notifications: boolean // macOS notification + Dock badge when a chat needs you
   quietLaunch: boolean // apps and URLs a chat opens stay behind the board (applies to chats started after the change)
+  keepAwake: KeepAwake // stop the Mac from sleeping: never / always / only while a chat is working
 }
 export const defaultSettings: Settings = {
   theme: 'dark',
@@ -67,4 +69,5 @@ export const defaultSettings: Settings = {
   termFontFamily: 'Terminal (SF Mono)',
   notifications: true,
   quietLaunch: true,
+  keepAwake: 'off',
 }

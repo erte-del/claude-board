@@ -39,3 +39,8 @@ export function badgeText(chats: { status: AttnStatus }[]): string {
   const n = chats.filter((c) => c.status === 'waiting').length
   return n ? String(n) : ''
 }
+
+/** Whether the Mac should be kept awake: always, or only while some chat is working (a limit or waiting chat is not burning anything). */
+export function wantAwake(mode: string | undefined, chats: { status: AttnStatus }[]): boolean {
+  return mode === 'always' || (mode === 'auto' && chats.some((c) => c.status === 'working'))
+}
