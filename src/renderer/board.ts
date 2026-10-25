@@ -506,7 +506,8 @@ export function createBoard(root: HTMLElement, h: Handlers) {
         : `Context: ${c.contextTokens.toLocaleString()}${c.contextWindow ? ` of ${c.contextWindow.toLocaleString()}` : ''} tokens` +
           (c.costUSD === null ? '\nCost: not shown (no verified price for this model)' : '\nCost: estimated from token usage')
       e.model.textContent = c.model ? c.model.replace(/^claude-/, '') : '—'
-      e.branch.textContent = `⎇ ${c.branch ?? '—'}`
+      e.branch.textContent = `${base(c.cwd)} · ⎇ ${c.branch ?? '—'}`
+      e.branch.title = c.cwd
       e.mode.hidden = !c.permMode || c.status === 'ended'
       e.mode.textContent = c.permMode ? MODE_LABEL[c.permMode] : ''
       e.mode.className = `mode${c.permMode === 'auto' || c.permMode === 'bypass' ? ' risky' : ''}`
