@@ -184,6 +184,7 @@ button.toggle.on { background: var(--accent); border-color: transparent; color: 
 .ask[hidden] { display: none; }
 .ask button { flex: 1; padding: 3px 0; border-radius: 6px; border: 1px solid var(--line); background: var(--btn); color: inherit; font: inherit; font-weight: 600; cursor: pointer; transition: background 0.15s; }
 .ask button:hover { background: var(--btn-hover); }
+.ask button[hidden] { display: none; }
 .ask-yes { border-color: var(--c-waiting) !important; color: var(--c-waiting); }
 .ask-yes:hover { background: var(--c-waiting) !important; color: #fff; }
 .hub-add { margin-left: 8px; width: 18px; height: 18px; line-height: 17px; text-align: center; border-radius: 50%; background: var(--btn-hover); color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer; display: inline-block; transition: background 0.15s, color 0.15s; }

@@ -168,6 +168,7 @@ module.exports = async function (t) {
 
   // ---- a chat that crashes: ended, with what it printed and the exit code
   const crasher = await t.newChat(A)
+  const crasherSid = (await info(crasher)).sessionId
   await t.waitFor(async () => (await info(crasher)).status === 'idle', { timeout: 8000 })
   await t.say(crasher, 'crash')
   const crashed = await t.waitFor(async () => (await info(crasher)).status === 'ended', { timeout: 8000 })
@@ -176,6 +177,31 @@ module.exports = async function (t) {
   t.check('its card says why (what it printed + the exit code)', note.includes('stub crash') && note.includes('[process exited with code 1]'), note)
   const logText = (() => { try { return fs.readFileSync(path.join(t.data, 'claude-board.log'), 'utf8') } catch { return '' } })()
   t.check('the crash is in the log file, with the exit code and what claude printed', /exit pid=\d+ .*code=1/.test(logText) && logText.includes('stub crash'), logText.slice(-300))
+
+  // ---- restart a crashed chat: a button on the card resumes the same session
+  const restartBtn = () => t.js(`(()=>{const b=document.querySelector('.card:not(.gone) .ask-restart:not([hidden])'); return !!b && !b.closest('[hidden]') && getComputedStyle(b).display !== 'none'})()`)
+  t.check('a crashed chat is marked crashed and its card offers Restart', (await info(crasher)).crashed === true && !!(await t.waitFor(restartBtn, { timeout: 4000 })))
+  const cardsBefore = await t.count('.card')
+  await t.js(`document.querySelector('.card:not(.gone) .ask-restart:not([hidden])').click()`)
+  t.check('Restart resumes the same session in the same card', !!(await t.waitFor(async () => { const c = (await t.chats()).find((x) => x.sessionId === crasherSid); return c && c.status !== 'ended' && !c.crashed }, { timeout: 8000 })) && (await t.count('.card')) === cardsBefore)
+  t.check('and the Restart button goes away', !!(await t.waitFor(async () => !(await restartBtn()), { timeout: 4000 })))
+
+  // ---- auto-restart (setting, off by default): resumes a crashed chat itself, but gives up after 3 tries in 10 minutes
+  { const readLog = () => { try { return fs.readFileSync(path.join(t.data, 'claude-board.log'), 'utf8') } catch { return '' } }
+    const logTail = () => readLog().split('\n').filter((l) => /restart|exit pid|start pid/.test(l)).slice(-8).map((l) => l.slice(11, 19) + l.slice(24).replace(/cwd=\S+/, '').slice(0, 60)).join(' | ')
+    const saved = (await t.js('api.loadSettings()')) || {}
+    await t.js(`api.saveSettings(${JSON.stringify({ ...saved, autoResume: true })})`)
+    const flaky = await t.newChat(A)
+    await t.waitFor(async () => (await info(flaky)).status === 'idle', { timeout: 8000 })
+    const sid = (await info(flaky)).sessionId
+    await t.say(flaky, 'crash')
+    t.check('with auto-restart on, a crashed chat comes back by itself', !!(await t.waitFor(async () => { const c = (await t.chats()).find((x) => x.sessionId === sid); return c && c.id !== flaky && c.status === 'idle' }, { timeout: 12000 })) && !!(await t.waitFor(() => readLog().includes('auto-restart 1/3'), { timeout: 3000 })), logTail())
+    const again = (await t.chats()).find((x) => x.sessionId === sid)
+    await t.say(again.id, 'crashloop')
+    t.check('a chat that keeps crashing is restarted 3 times, then left alone', !!(await t.waitFor(() => readLog().includes('giving up on ' + sid), { timeout: 20000 })), logTail())
+    const last = (await t.waitFor(async () => { const c = (await t.chats()).find((x) => x.sessionId === sid); return c && c.status === 'ended' && c }, { timeout: 5000 }))
+    t.check('and it ends with its Restart button instead of looping', !!last && last.crashed && (readLog().match(/auto-restart \d\/3/g) || []).length === 3, JSON.stringify(last && [last.status, last.crashed]))
+    await t.js(`api.saveSettings(${JSON.stringify({ ...saved, autoResume: false })})`) }
 
 
   // ---- kill, then remove

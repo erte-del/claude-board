@@ -8,6 +8,7 @@
 //   crash        print an error and exit with code 1
 //   mode NAME    switch the permission mode shown on the status line (manual, auto, accept-edits, plan, bypass)
 //   quiet        report $BROWSER and the first PATH folder (the no-focus shim)
+//   crashloop    like crash, and every later --resume crashes at once too (for the auto-restart limit)
 //   exit         exit normally
 // An opening prompt (the argument after `--`) is submitted at start-up, as if typed.
 //   anything else: replies "echo: <text>"
@@ -37,6 +38,7 @@ const usage = { input_tokens: 1000, output_tokens: 50, cache_read_input_tokens: 
 const user = (text) => append({ type: 'user', message: { role: 'user', content: text } })
 const assistant = (text) => append({ type: 'assistant', message: { id: `msg_${sid.slice(0, 6)}_${++n}`, model: 'claude-sonnet-5-5', role: 'assistant', content: [{ type: 'text', text }], usage } })
 
+if (resumed && fs.existsSync(file + '.crashy')) { process.stderr.write('fatal: stub crash loop\n'); process.exit(1) }
 write('\x1b[?2004h') // bracketed paste on, like the real one
 write(`Stub Claude Code · ${path.basename(cwd)}${resumed ? ' · resumed' : ''}\r\nSonnet 5.5 · Claude Max\r\n`)
 let permMode = 'auto' // the status line the real one prints under the prompt (here above it, so the cursor stays on the prompt)
@@ -61,7 +63,8 @@ function submit(text) {
   if (cmd === 'mode' && STATUS[arg]) { permMode = arg; return reply(`mode: ${arg}`) }
   if (cmd === 'quiet') return reply(`quiet: ${process.env.BROWSER} first=${process.env.PATH.split(':')[0]}`)
   if (cmd === 'exit') process.exit(0)
-  if (cmd === 'crash') { process.stderr.write('fatal: stub crash\n'); process.exit(1) }
+  if (cmd === 'crashloop') fs.writeFileSync(file + '.crashy', '')
+  if (cmd === 'crash' || cmd === 'crashloop') { process.stderr.write('fatal: stub crash\n'); process.exit(1) }
   if (cmd === 'ask') {
     mode = 'dialog'
     write(' touch stub-file\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. Yes, and don’t ask again for: touch *\r\n  3. Yes, and switch to auto mode') // the real wording; digits answer at once

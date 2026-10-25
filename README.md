@@ -161,6 +161,8 @@ badge: the number of chats waiting, or `!` while a limit is hit. Nothing is show
 
 **Opening prompt:** the new-chat bar (⌘N) has a second field. Whatever you type there is sent as the chat's first message (also when you use *Browse folders…*). It is passed to `claude` as a plain argument after `--`, never through a shell.
 
+**Crashed chats:** a chat whose `claude` exits with an error (not one you killed) gets a **↻ Restart** button that resumes the same session. In Customize, *Restart crashed chats automatically* (off by default) does it for you, at most 3 times in 10 minutes per chat; each restart is written to the log, and after that the button stays.
+
 ### Inside a chat
 
 - **Split view:** two chats side by side, each a live terminal. Click a pane to focus it (its header gets an underline and the

@@ -17,6 +17,7 @@ export type ChatInfo = {
   contextTokens: number | null // size of the latest request (what's in the window now)
   contextWindow: number | null // window of that model, if known
   costUSD: number | null // estimated spend, only for models with a verified price
+  crashed: boolean // ended with an error exit (not killed by the user): the card offers Restart
   permMode: PermMode | null // from Claude Code's status line; null until it has been seen
   prompt: string | null // a tool-permission question the card can answer with Yes / No buttons, while waiting on one
   resumable: boolean // ended (or restored from a previous run) and has a transcript, so a click can resume it
@@ -54,6 +55,7 @@ export type Settings = {
   termFontFamily: string // chat view font (DEFAULT_TERM_FONT = Terminal.app's SF Mono)
   notifications: boolean // macOS notification + Dock badge when a chat needs you
   quietLaunch: boolean // apps and URLs a chat opens stay behind the board (applies to chats started after the change)
+  autoResume: boolean // resume crashed chats by themselves, at most 3 times in 10 minutes each
   keepAwake: KeepAwake // stop the Mac from sleeping: never / always / only while a chat is working
 }
 export const defaultSettings: Settings = {
@@ -72,4 +74,5 @@ export const defaultSettings: Settings = {
   notifications: true,
   quietLaunch: true,
   keepAwake: 'off',
+  autoResume: false,
 }

@@ -15,10 +15,10 @@ const MINI_W = 150, MINI_H = 74, MINI_GAP = 6, CARD_PAD = 12
 let SPAN = 230, MIN_RING = 250 // nominal spacing between neighbours on a ring, and the smallest ring radius (follow the card width)
 const GRID = 24 // dot-grid spacing
 
-type Handlers = { open(chatId: string, beside?: boolean): void; resume(sessionId: string, beside?: boolean): void; kill(chatId: string): void; newIn(cwd: string): void; answer(chatId: string, question: string, yes: boolean): void; save(l: Layout): void }
+type Handlers = { open(chatId: string, beside?: boolean): void; resume(sessionId: string, beside?: boolean): void; kill(chatId: string): void; restart(sessionId: string): void; newIn(cwd: string): void; answer(chatId: string, question: string, yes: boolean): void; save(l: Layout): void }
 type MiniEls = { el: HTMLElement; title: HTMLElement; feed: HTMLElement; feedSig: string }
 type CardEls = {
-  card: HTMLElement; idx: HTMLElement; kill: HTMLElement; name: HTMLElement; nameInput: HTMLInputElement; use: HTMLElement; ctx: HTMLElement; cost: HTMLElement; bar: HTMLElement; model: HTMLElement; branch: HTMLElement; mode: HTMLElement; tps: HTMLElement; feed: HTMLElement; ask: HTMLElement; feedSig: string
+  card: HTMLElement; idx: HTMLElement; kill: HTMLElement; name: HTMLElement; nameInput: HTMLInputElement; use: HTMLElement; ctx: HTMLElement; cost: HTMLElement; bar: HTMLElement; model: HTMLElement; branch: HTMLElement; mode: HTMLElement; tps: HTMLElement; feed: HTMLElement; ask: HTMLElement; restart: HTMLElement; feedSig: string
   subs: HTMLElement; minis: Map<string, MiniEls>; line: SVGPathElement
 }
 type Drag = { kind: 'card' | 'hub' | 'pan'; key: string; start: Pt; orig: Pt; moved: boolean; shift: boolean; onClick?: (shift: boolean) => void }
@@ -281,6 +281,12 @@ export function createBoard(root: HTMLElement, h: Handlers) {
       b.onclick = (e) => { e.stopPropagation(); const c = chats.find((x) => x.sessionId === key); if (c?.prompt) h.answer(c.id, c.prompt, yes) }
       ask.append(b)
     }
+    const restart = el('button', 'ask-restart', '↻ Restart') // a crashed chat: resume the same session
+    restart.title = 'Resume this chat where it stopped'
+    restart.hidden = true
+    restart.onpointerdown = (e) => e.stopPropagation()
+    restart.onclick = (e) => { e.stopPropagation(); h.restart(key) }
+    ask.append(restart)
     card.append(name, nameInput, head, sub, use, meter, el('hr'), feed, ask, subs, alert, idx, rename, kill)
     card.onpointerdown = (e) => {
       const c = chats.find((x) => x.sessionId === key)
@@ -290,7 +296,7 @@ export function createBoard(root: HTMLElement, h: Handlers) {
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'path')
     line.classList.add('no-anim')
     svg.append(line)
-    return { card, idx, kill, name, nameInput, use, ctx, cost, bar, model, branch, mode, tps, feed, ask, feedSig: '\0', subs, minis: new Map(), line }
+    return { card, idx, kill, name, nameInput, use, ctx, cost, bar, model, branch, mode, tps, feed, ask, restart, feedSig: '\0', subs, minis: new Map(), line }
   }
 
   function makeMini(): MiniEls {
@@ -418,7 +424,10 @@ export function createBoard(root: HTMLElement, h: Handlers) {
         e.feedSig = sig
         e.feed.replaceChildren(...feedNodes(lines, 'No output yet'))
       }
-      e.ask.hidden = !c.prompt
+      const canRestart = c.status === 'ended' && c.crashed && c.resumable
+      e.restart.hidden = !canRestart
+      for (const x of e.ask.querySelectorAll<HTMLElement>('.ask-yes, .ask-no')) x.hidden = !c.prompt
+      e.ask.hidden = !c.prompt && !canRestart
       updateSubs(e, c.subagents)
       if (fresh) settle(e.card, e.line)
     }
