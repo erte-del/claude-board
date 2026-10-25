@@ -66,7 +66,7 @@ module.exports = async function (t) {
 
   // ---- Yes / No buttons on the card answer a permission question
   const btn = (sel) => t.js(`(()=>{const b=document.querySelector('.card .ask ${sel}'); return b && getComputedStyle(b).display !== 'none' && !b.closest('[hidden]') ? b.textContent : null})()`)
-  t.check('no answer buttons while nothing is being asked', (await btn('.ask-yes')) === null)
+  t.check('no answer buttons while nothing is being asked', !!(await t.waitFor(async () => (await btn('.ask-yes')) === null, { timeout: 3000 }))) // the card repaints a moment after the answer
   await t.say(id, 'ask')
   await t.waitFor(async () => (await info(id)).prompt === 'Do you want to proceed?', { timeout: 8000 })
   { const c = await info(id); t.check('the card knows the question and shows what is being asked, not the option list', c.prompt === 'Do you want to proceed?' && c.feed.some((x) => x.includes('touch stub-file')) && !c.feed.some((x) => /^[❯>]?\s*\d\./.test(x)), JSON.stringify([c.prompt, c.feed])) }

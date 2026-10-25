@@ -16,7 +16,7 @@ import { sanitizeRegistry, type RegEntry } from './registry.mts'
 import { SubagentWatcher, Tailer } from './tailer.mts'
 import { modelFromScreen, permissionMode, permissionPrompt, waitingForUser, type PermMode } from './screen.mts'
 import { createLogger } from './logger.mts'
-import { badgeText, planLimitReset, planNotifications, wantAwake } from './attention.mts'
+import { badgeText, inQuietHours, planFinished, planLimitReset, planNotifications, wantAwake } from './attention.mts'
 import { CONTEXT_WINDOW } from './pricing.mts'
 import { restoreBounds } from './windowstate.mts'
 import { groupFontFiles } from './fontfiles.mts'
@@ -40,6 +40,7 @@ type Chat = {
   gitBranch: string | null
   prev?: Status // status at the previous tick, to spot transitions
   killed: boolean // ended because the user killed it
+  seenReply: string | null // last reply already announced (or present before this process started), so "finished" fires once per new reply
   crashed: boolean // ended with a non-zero exit or a signal, not killed by the user
   endNote: string[] | null // what the card shows once the process is gone
   permMode: PermMode | null // last permission mode seen on the status line (kept while a dialog hides it)
@@ -53,6 +54,7 @@ let claudeBin: string | null = null
 let lastSig = ''
 let confirmedQuit = false
 let notifyOn = true // from settings.json (renderer's "Notify me" toggle)
+let notifyPrefs = { finish: false, sound: false, quiet: false, quietStart: 22, quietEnd: 8 } // from settings.json
 let autoResume = false // from settings.json: resume crashed chats by themselves (a few times, then give up)
 const restarts = new Map<string, number[]>() // sessionId -> recent auto-restart times
 let keepAwake = 'off' // from settings.json: off / always / auto
@@ -62,6 +64,7 @@ let blockerId: number | null = null
 let lastBadge = ''
 let wasLimited = false
 let limitResetAt: number | null = null // when the current limit lifts, if its notice said (applies to every limited chat)
+let muted: Record<string, boolean> = {} // sessionIds whose "finished" notifications are off (kept in the layout file)
 let titles: Record<string, string> = {} // names the user gave cards (kept in the layout file), for notification text
 let stopping = false
 
@@ -186,7 +189,7 @@ function spawnChat(folder: string, args: string[], sessionId: string, resumed = 
   const p = pty.spawn(claudePath, args, { name: 'xterm-256color', cols: 80, rows: 24, cwd, env })
   log(`start pid=${p.pid} cwd=${cwd} ${args.join(' ')}`)
   const file = transcriptFile(cwd, sessionId)
-  const chat: Chat = { id, pty: p, cwd, sessionId, status: 'working', buffer: '', lastData: Date.now(), lastInput: 0, tailer: new Tailer(file), subs: new SubagentWatcher(path.join(path.dirname(file), sessionId, 'subagents')), screen: new Terminal({ cols: 80, rows: 24, allowProposedApi: true }), gitBranch: null, killed: false, crashed: false, endNote: null, screenModel: null, permMode: null, prev: undefined }
+  const chat: Chat = { id, pty: p, cwd, sessionId, status: 'working', buffer: '', lastData: Date.now(), lastInput: 0, tailer: new Tailer(file), subs: new SubagentWatcher(path.join(path.dirname(file), sessionId, 'subagents')), screen: new Terminal({ cols: 80, rows: 24, allowProposedApi: true }), gitBranch: null, killed: false, seenReply: null, crashed: false, endNote: null, screenModel: null, permMode: null, prev: undefined }
   if (resumed) { chat.tailer.catchUp(); chat.subs.catchUp() } // history is shown; its stale limit / pending-tool state is not
   // Branch for the card before the first transcript entry exists.
   execFile('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], (err, out) => { if (!err) chat.gitBranch = out.trim() })
@@ -215,6 +218,7 @@ function spawnChat(folder: string, args: string[], sessionId: string, resumed = 
     notifyChanged()
     if (failed && autoResume && !stopping && chat.tailer.exists) autoRestart(chat)
   })
+  if (resumed) { chat.tailer.poll(); chat.seenReply = chat.tailer.state.lastReply } // its old last reply is not news
   chats.set(id, chat)
   notifyChanged()
   return id
@@ -307,16 +311,25 @@ function setAwake(on: boolean) {
 function attend(live: Chat[], limited: boolean) {
   if (stopping) return // shutting down: no notifications, no badge changes
   const watching = (id: string) => !!win && win.isFocused() && (attached.size === 0 || attached.has(id)) // board visible, or that chat is on screen
-  const plans = planNotifications(
-    live.map((c) => ({ id: c.id, cwd: c.cwd, name: titles[c.sessionId], status: c.status, prev: c.prev, detail: c.status === 'limit' ? (c.tailer.state.limit ?? '') : dialogText(c).slice(0, 3).join(' · ') })),
-    { enabled: notifyOn && Notification.isSupported(), watching },
-  )
+  const quiet = notifyPrefs.quiet && inQuietHours(new Date().getHours(), notifyPrefs.quietStart, notifyPrefs.quietEnd)
+  const enabled = notifyOn && !quiet && Notification.isSupported()
+  const plans = [
+    ...planNotifications(
+      live.map((c) => ({ id: c.id, cwd: c.cwd, name: titles[c.sessionId], status: c.status, prev: c.prev, detail: c.status === 'limit' ? (c.tailer.state.limit ?? '') : dialogText(c).slice(0, 3).join(' · ') })),
+      { enabled, watching },
+    ),
+    ...planFinished(
+      live.map((c) => ({ id: c.id, cwd: c.cwd, name: titles[c.sessionId], status: c.status, prev: c.prev, reply: c.tailer.state.lastReply, seen: c.seenReply, muted: muted[c.sessionId] })),
+      { enabled: enabled && notifyPrefs.finish, watching },
+    ),
+  ]
+  for (const c of live) if (c.prev === 'working' && c.status === 'idle') c.seenReply = c.tailer.state.lastReply // announced or not, don't announce it later
   for (const p of plans) {
-    const n = new Notification({ title: p.title, body: p.body })
+    const n = new Notification({ title: p.title, body: p.body, ...(p.kind === 'waiting' ? (notifyPrefs.sound ? { sound: 'Ping' } : { silent: true }) : {}) })
     n.on('click', () => { win?.show(); win?.focus(); send('open-chat', p.chatId) })
     n.show()
   }
-  const lifted = planLimitReset(wasLimited, limited, !!win && win.isFocused() && attached.size === 0, notifyOn && Notification.isSupported(), live.length > 0)
+  const lifted = planLimitReset(wasLimited, limited, !!win && win.isFocused() && attached.size === 0, enabled, live.length > 0)
   if (lifted) new Notification(lifted).show()
   wasLimited = limited
   for (const c of live) c.prev = c.status
@@ -385,6 +398,7 @@ ipcMain.handle('addChat', async (_e, sessionId: string): Promise<{ ok: true } | 
 ipcMain.handle('loadLayout', (): Layout => ({ ...emptyLayout(), ...(readJson('board-layout.json') as object | null) }))
 ipcMain.handle('saveLayout', (_e, layout: Layout) => {
   titles = layout.titles ?? {}
+  muted = layout.muted ?? {}
   return writeJson('board-layout.json', layout)
 })
 // Font files the user has installed (Chromium can't use ~/Library/Fonts by name, but it can load the files).
@@ -403,10 +417,12 @@ ipcMain.handle('listFonts', () => {
   return out
 })
 function applySettings(settings: unknown) {
-  const o = settings as { autoResume?: boolean; notifications?: boolean; keepAwake?: string; quietLaunch?: boolean } | null
+  const o = settings as { finishNotify?: boolean; waitingSound?: boolean; quietHours?: boolean; quietStart?: number; quietEnd?: number; autoResume?: boolean; notifications?: boolean; keepAwake?: string; quietLaunch?: boolean } | null
   notifyOn = o?.notifications !== false
   keepAwake = o?.keepAwake ?? 'off'
   autoResume = o?.autoResume === true
+  const hour = (v: unknown, d: number) => (Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 23 ? (v as number) : d)
+  notifyPrefs = { finish: o?.finishNotify === true, sound: o?.waitingSound === true, quiet: o?.quietHours === true, quietStart: hour(o?.quietStart, 22), quietEnd: hour(o?.quietEnd, 8) }
   quietLaunch = o?.quietLaunch !== false && shimOk
 }
 // ⌘V with an image on the clipboard: save it as a PNG/JPEG and hand back its path (the renderer types it, like a dropped file).
@@ -526,7 +542,9 @@ app.whenReady().then(async () => {
   void sweepPasted()
   await writeShim()
   applySettings(readJson('settings.json'))
-  titles = (readJson('board-layout.json') as { titles?: Record<string, string> } | null)?.titles ?? {}
+  const saved = readJson('board-layout.json') as { titles?: Record<string, string>; muted?: Record<string, boolean> } | null
+  titles = saved?.titles ?? {}
+  muted = saved?.muted ?? {}
   loadRegistry()
   // The app itself makes no network requests; this makes sure nothing in the page can either.
   session.defaultSession.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] }, (_d, cb) => cb({ cancel: true }))

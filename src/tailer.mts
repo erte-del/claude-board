@@ -15,6 +15,7 @@ export class TranscriptState {
   tps: number | null = null
   feed: string[] = []
   pending = new Set<string>() // tool_use ids with no tool_result yet: Claude is running a tool or waiting for approval
+  lastReply: string | null = null // the newest assistant text, in full (the card feed clips it)
   limit: string | null = null // set while the newest assistant entry is a rate-limit notice
   limitResetAt: number | null = null // when that limit lifts (epoch ms), read from the notice; null if it gave no time
   private prevTs = 0
@@ -77,7 +78,7 @@ export class TranscriptState {
       this.limitResetAt = null
       if (m.model && m.model !== '<synthetic>') this.model = m.model
       for (const b of blocks) {
-        if (b?.type === 'text') this.push(String(b.text ?? ''))
+        if (b?.type === 'text') { this.push(String(b.text ?? '')); if (String(b.text ?? '').trim()) this.lastReply = String(b.text).trim() }
         else if (b?.type === 'tool_use') {
           this.pending.add(b.id)
           this.push(`▸ ${b.name} ${toolArg(b.input)}`)

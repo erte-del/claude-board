@@ -32,6 +32,7 @@ export type Layout = {
   titles: Record<string, string>
   collapsed: Record<string, boolean>
   hideEnded: boolean
+  muted?: Record<string, boolean> // sessionId -> no "finished" notifications for this chat
   view?: { x: number; y: number; k: number }
 }
 export const emptyLayout = (): Layout => ({ clusters: {}, cards: {}, titles: {}, collapsed: {}, hideEnded: false })
@@ -55,6 +56,11 @@ export type Settings = {
   termFontFamily: string // chat view font (DEFAULT_TERM_FONT = Terminal.app's SF Mono)
   notifications: boolean // macOS notification + Dock badge when a chat needs you
   quietLaunch: boolean // apps and URLs a chat opens stay behind the board (applies to chats started after the change)
+  finishNotify: boolean // a notification when a chat finishes a turn (off by default)
+  waitingSound: boolean // play a sound with the "needs you" notification
+  quietHours: boolean // no notifications between quietStart and quietEnd
+  quietStart: number // hour 0–23
+  quietEnd: number
   autoResume: boolean // resume crashed chats by themselves, at most 3 times in 10 minutes each
   keepAwake: KeepAwake // stop the Mac from sleeping: never / always / only while a chat is working
 }
@@ -74,5 +80,10 @@ export const defaultSettings: Settings = {
   notifications: true,
   quietLaunch: true,
   keepAwake: 'off',
+  finishNotify: false,
+  waitingSound: false,
+  quietHours: false,
+  quietStart: 22,
+  quietEnd: 8,
   autoResume: false,
 }

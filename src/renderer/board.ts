@@ -18,7 +18,7 @@ const GRID = 24 // dot-grid spacing
 type Handlers = { open(chatId: string, beside?: boolean): void; resume(sessionId: string, beside?: boolean): void; kill(chatId: string): void; restart(sessionId: string): void; newIn(cwd: string): void; answer(chatId: string, question: string, yes: boolean): void; save(l: Layout): void }
 type MiniEls = { el: HTMLElement; title: HTMLElement; feed: HTMLElement; feedSig: string }
 type CardEls = {
-  card: HTMLElement; idx: HTMLElement; kill: HTMLElement; name: HTMLElement; nameInput: HTMLInputElement; use: HTMLElement; ctx: HTMLElement; cost: HTMLElement; bar: HTMLElement; model: HTMLElement; branch: HTMLElement; mode: HTMLElement; tps: HTMLElement; feed: HTMLElement; ask: HTMLElement; restart: HTMLElement; feedSig: string
+  card: HTMLElement; idx: HTMLElement; kill: HTMLElement; mute: HTMLElement; name: HTMLElement; nameInput: HTMLInputElement; use: HTMLElement; ctx: HTMLElement; cost: HTMLElement; bar: HTMLElement; model: HTMLElement; branch: HTMLElement; mode: HTMLElement; tps: HTMLElement; feed: HTMLElement; ask: HTMLElement; restart: HTMLElement; feedSig: string
   subs: HTMLElement; minis: Map<string, MiniEls>; line: SVGPathElement
 }
 type Drag = { kind: 'card' | 'hub' | 'pan'; key: string; start: Pt; orig: Pt; moved: boolean; shift: boolean; onClick?: (shift: boolean) => void }
@@ -264,6 +264,15 @@ export function createBoard(root: HTMLElement, h: Handlers) {
     kill.title = 'Kill this chat'
     kill.onpointerdown = (e) => e.stopPropagation()
     kill.onclick = () => { const c = chats.find((x) => x.sessionId === key); if (c) h.kill(c.id) }
+    const mute = el('button', 'mute', '🔔') // no "finished" notifications for this chat
+    mute.onpointerdown = (e) => e.stopPropagation()
+    mute.onclick = (e) => {
+      e.stopPropagation()
+      const m = (layout.muted ??= {})
+      if (m[key]) delete m[key]; else m[key] = true
+      paintMute(mute, key)
+      save()
+    }
     const alert = el('span', 'alert', '!') // shown by CSS only while the card is waiting for the user
     alert.title = 'Waiting for your input'
     const idx = el('span', 'idx') // "⌘3": which key jumps here; only visible while ⌘ is held
@@ -287,7 +296,7 @@ export function createBoard(root: HTMLElement, h: Handlers) {
     restart.onpointerdown = (e) => e.stopPropagation()
     restart.onclick = (e) => { e.stopPropagation(); h.restart(key) }
     ask.append(restart)
-    card.append(name, nameInput, head, sub, use, meter, el('hr'), feed, ask, subs, alert, idx, rename, kill)
+    card.append(name, nameInput, head, sub, use, meter, el('hr'), feed, ask, subs, alert, idx, rename, mute, kill)
     card.onpointerdown = (e) => {
       const c = chats.find((x) => x.sessionId === key)
       if (c) startDrag(e, { kind: 'card', key, orig: { ...layout.cards[key] }, onClick: (shift) => activate(c, shift) })
@@ -296,7 +305,14 @@ export function createBoard(root: HTMLElement, h: Handlers) {
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'path')
     line.classList.add('no-anim')
     svg.append(line)
-    return { card, idx, kill, name, nameInput, use, ctx, cost, bar, model, branch, mode, tps, feed, ask, restart, feedSig: '\0', subs, minis: new Map(), line }
+    return { card, idx, kill, mute, name, nameInput, use, ctx, cost, bar, model, branch, mode, tps, feed, ask, restart, feedSig: '\0', subs, minis: new Map(), line }
+  }
+
+  function paintMute(btn: HTMLElement, key: string) {
+    const off = !!layout.muted?.[key]
+    btn.textContent = off ? '🔕' : '🔔'
+    btn.title = off ? 'Muted: no "finished" notification for this chat. Click to unmute' : 'Click to mute the "finished" notification for this chat'
+    btn.classList.toggle('on', off)
   }
 
   function makeMini(): MiniEls {
@@ -426,6 +442,7 @@ export function createBoard(root: HTMLElement, h: Handlers) {
       }
       const canRestart = c.status === 'ended' && c.crashed && c.resumable
       e.restart.hidden = !canRestart
+      paintMute(e.mute, c.sessionId)
       for (const x of e.ask.querySelectorAll<HTMLElement>('.ask-yes, .ask-no')) x.hidden = !c.prompt
       e.ask.hidden = !c.prompt && !canRestart
       updateSubs(e, c.subagents)

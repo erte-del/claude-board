@@ -115,6 +115,25 @@ module.exports = async function (t) {
   // ---- settings: theme, colour picker, reset, persistence
   await t.key('Comma', { meta: true, key: ',' }); await settle(500)
   t.check('⌘, opens the Customize panel', await t.js(`document.getElementById('settings').classList.contains('open')`))
+  // ---- per-chat mute of the "finished" notification
+  const bell = (i) => t.js(`(()=>{const b=document.querySelectorAll('.card')[${i}].querySelector('.mute'); return [b.textContent, getComputedStyle(b).display]})()`)
+  t.check('an unmuted card shows no bell until hovered', JSON.stringify(await bell(0)) === '["🔔","none"]', JSON.stringify(await bell(0)))
+  await t.js(`document.querySelectorAll('.card')[0].querySelector('.mute').click()`); await settle(500)
+  t.check('clicking the bell mutes the chat, and a muted card keeps showing 🔕', JSON.stringify(await bell(0)) === '["🔕","block"]', JSON.stringify(await bell(0)))
+  t.check('the mute is saved in the layout', (t.readJson('board-layout.json') || {}).muted?.s1 === true)
+  await t.js(`document.querySelectorAll('.card')[0].querySelector('.mute').click()`); await settle(500)
+  t.check('clicking again unmutes and removes it from the layout', JSON.stringify(await bell(0)) === '["🔔","none"]' && !(t.readJson('board-layout.json') || {}).muted?.s1)
+
+  // ---- notification settings: finished notifications and the sound are off by default; quiet hours is a window
+  await t.key('Comma', { meta: true, key: ',' }); await settle(400)
+  const sw = (label) => t.js(`(()=>{const r=[...document.querySelectorAll('#settings .row')].find(r=>r.textContent.startsWith(${JSON.stringify(label)})); return r.querySelector('input').checked})()`)
+  t.check('"also notify when a chat finishes", the sound and quiet hours all start off', !(await sw('Also notify')) && !(await sw('Sound with')) && !(await sw('Quiet hours')))
+  await t.js(`[...document.querySelectorAll('#settings .row')].find(r=>r.textContent.startsWith('Also notify')).querySelector('input').click()`); await settle(500)
+  t.check('turning finished notifications on is saved', (t.readJson('settings.json') || {}).finishNotify === true)
+  await t.js(`document.querySelector('#settings .reset').click()`); await settle(500)
+  t.check('Reset to defaults turns it off again', (t.readJson('settings.json') || {}).finishNotify === false)
+  await t.key('Comma', { meta: true, key: ',' }); await settle(400)
+
   await t.js(`[...document.querySelectorAll('#settings .segmented button')].find(b=>b.textContent==='Light').click()`); await settle(300)
   t.check('choosing the Light theme applies it', (await t.js(`document.documentElement.dataset.theme`)) === 'light')
   await t.js(`[...document.querySelectorAll('#settings .row')].find(r=>r.textContent.startsWith('Working')).querySelector('.swatch').click()`); await settle(400)

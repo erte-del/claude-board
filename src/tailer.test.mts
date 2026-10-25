@@ -171,3 +171,12 @@ test('SubagentWatcher.costUSD sums every sub-agent, finished ones included', () 
   w.poll()
   assert.equal(w.costUSD(), 15) // 1.5M output tokens at $10/MTok
 })
+
+test('lastReply is the newest assistant text in full, not clipped like the feed', () => {
+  const s = new TranscriptState()
+  const long = 'word '.repeat(100).trim()
+  s.apply({ type: 'assistant', timestamp: '2026-01-01T00:00:00Z', message: { id: 'm1', content: [{ type: 'text', text: 'first' }] } })
+  s.apply({ type: 'assistant', timestamp: '2026-01-01T00:00:01Z', message: { id: 'm2', content: [{ type: 'text', text: long }, { type: 'tool_use', id: 't', name: 'Bash', input: { command: 'ls' } }] } })
+  assert.equal(s.lastReply, long)
+  assert.ok(s.feed[1].length < long.length)
+})
