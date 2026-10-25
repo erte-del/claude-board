@@ -186,6 +186,21 @@ module.exports = async function (t) {
   t.check('Reset to defaults turns it off again', (t.readJson('settings.json') || {}).finishNotify === false)
   await t.key('Comma', { meta: true, key: ',' }); await settle(400)
 
+  // ---- terminal colour presets
+  const termBg = () => t.js(`getComputedStyle(document.documentElement).getPropertyValue('--term-bg').trim()`)
+  const pick = (label) => t.js(`(()=>{const r=[...document.querySelectorAll('#settings .row')].find(r=>r.textContent.startsWith('Terminal colours')); const s=r.querySelector('select'); s.value=[...s.options].find(o=>o.textContent.startsWith(${JSON.stringify(label)})).value; s.dispatchEvent(new Event('change',{bubbles:true}))})()`)
+  await t.key('Comma', { meta: true, key: ',' }); await settle(400)
+  t.check('the terminal colours start at the default dark', (await termBg()) === '#1e1e1e')
+  const offered = await t.js(`[...[...document.querySelectorAll('#settings .row')].find(r=>r.textContent.startsWith('Terminal colours')).querySelectorAll('option')].map(o=>o.textContent)`)
+  t.check('the presets are offered', ['Dracula', 'Solarized Dark', 'One Dark', 'GitHub Dark', 'macOS Dark (Pro)', 'macOS Light (Basic)'].every((n) => offered.includes(n)), JSON.stringify(offered))
+  await pick('Dracula'); await settle(400)
+  t.check('choosing Dracula recolours the terminal background and saves the choice', (await termBg()) === '#282a36' && (t.readJson('settings.json') || {}).termTheme === 'dracula', await termBg())
+  await pick('macOS Light'); await settle(300)
+  t.check('a light preset works too', (await termBg()) === '#ffffff')
+  await t.js(`document.querySelector('#settings .reset').click()`); await settle(400)
+  t.check('Reset to defaults brings the default back', (await termBg()) === '#1e1e1e')
+  await t.key('Comma', { meta: true, key: ',' }); await settle(400)
+
   await t.js(`[...document.querySelectorAll('#settings .segmented button')].find(b=>b.textContent==='Light').click()`); await settle(300)
   t.check('choosing the Light theme applies it', (await t.js(`document.documentElement.dataset.theme`)) === 'light')
   await t.js(`[...document.querySelectorAll('#settings .row')].find(r=>r.textContent.startsWith('Working')).querySelector('.swatch').click()`); await settle(400)

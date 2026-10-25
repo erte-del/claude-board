@@ -375,4 +375,20 @@ module.exports = async function (t) {
     await t.say(w, 'carry on')
     t.check('the mark goes away with the next message', !!(await t.waitFor(async () => { const c = await info(w); return c.interrupted === false && c.feed.some((f) => f.includes('echo: carry on')) }, { timeout: 8000 })))
   }
+
+  // ---- terminal colour preset reaches the real terminal (pixel check on a new pane)
+  { const pickTheme = (label) => t.js(`(()=>{const r=[...document.querySelectorAll('#settings .row')].find(r=>r.textContent.startsWith('Terminal colours')); const s=r.querySelector('select'); s.value=[...s.options].find(o=>o.textContent.startsWith(${JSON.stringify(label)})).value; s.dispatchEvent(new Event('change',{bubbles:true}))})()`)
+    const pixel = async () => { const img = await t.win.webContents.capturePage(); const { width, height } = img.getSize(); const b = img.toBitmap(); const x = Math.floor(width / 2), y = Math.floor(height * 0.8), o = (y * width + x) * 4; return [b[o + 2], b[o + 1], b[o]] } // BGRA
+    const near = (a, b) => a.every((v, i) => Math.abs(v - b[i]) <= 6)
+    await t.key('KeyB', { meta: true, shift: true, key: 'B' }); await t.sleep(400)
+    await t.key('Comma', { meta: true, key: ',' }); await t.sleep(400)
+    await pickTheme('Dracula'); await t.sleep(300)
+    await t.key('Comma', { meta: true, key: ',' }); await t.sleep(400)
+    await t.openCard(0); await t.sleep(1200)
+    const px = await pixel()
+    t.check('a terminal opened with the Dracula preset is drawn on its background (#282a36)', near(px, [0x28, 0x2a, 0x36]), JSON.stringify(px))
+    await t.key('KeyB', { meta: true, shift: true, key: 'B' }); await t.sleep(400)
+    await t.key('Comma', { meta: true, key: ',' }); await t.sleep(400)
+    await pickTheme('Default'); await t.sleep(300)
+    await t.key('Comma', { meta: true, key: ',' }); await t.sleep(400) }
 }

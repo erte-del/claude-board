@@ -58,6 +58,7 @@ export type Settings = {
   grid: boolean // dotted board background
   motion: boolean // easing and animations
   termFont: number // chat view font size
+  termTheme: string // colour preset for the chat terminal (see termthemes.mts)
   termFontFamily: string // chat view font (DEFAULT_TERM_FONT = Terminal.app's SF Mono)
   notifications: boolean // macOS notification + Dock badge when a chat needs you
   quietLaunch: boolean // apps and URLs a chat opens stay behind the board (applies to chats started after the change)
@@ -82,6 +83,7 @@ export const defaultSettings: Settings = {
   grid: true,
   motion: true,
   termFont: 12,
+  termTheme: 'default',
   termFontFamily: 'Terminal (SF Mono)',
   notifications: true,
   quietLaunch: true,

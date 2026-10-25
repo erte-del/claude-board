@@ -6,6 +6,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import type { Api } from '../preload'
 import { shellEscapePath } from '../shellpath.mts'
+import { termTheme } from '../termthemes.mts'
 import { DEFAULT_TERM_FONT, type ChatInfo, type Settings } from '../types'
 
 export const fontCss = (label: string) => (label === DEFAULT_TERM_FONT ? 'TermSF, Menlo, monospace' : `"${label}", TermSF, Menlo, monospace`)
@@ -117,7 +118,7 @@ export function createChatView(d: Deps) {
     el.append(head, body)
     d.wrap.append(el)
 
-    const term = new Terminal({ ...termOptions(s), cursorBlink: true, macOptionIsMeta: true, allowProposedApi: true, scrollback: 5000, theme: { background: '#1e1e1e' } })
+    const term = new Terminal({ ...termOptions(s), cursorBlink: true, macOptionIsMeta: true, allowProposedApi: true, scrollback: 5000, theme: termTheme(s.termTheme) })
     const fit = new FitAddon()
     const search = new SearchAddon()
     term.loadAddon(fit)
@@ -275,6 +276,7 @@ export function createChatView(d: Deps) {
       for (const p of panes) {
         p.term.options.fontSize = s.termFont
         p.term.options.fontFamily = fontCss(s.termFontFamily)
+        p.term.options.theme = termTheme(s.termTheme)
         p.fit.fit()
       }
     },

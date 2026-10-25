@@ -1,3 +1,4 @@
+import { TERM_THEMES, termTheme } from '../termthemes.mts'
 import { closePicker, openPicker } from './colorpicker'
 import { DEFAULT_TERM_FONT, defaultSettings, type KeepAwake, type Settings, type StateKey, type Theme } from '../types'
 
@@ -22,6 +23,7 @@ export function applySettings(s: Settings) {
   r.style.setProperty('--card-font', `${s.cardFont}px`)
   r.style.setProperty('--line-w', `${s.lineWidth}px`)
   r.classList.toggle('no-motion', !s.motion)
+  r.style.setProperty('--term-bg', termTheme(s.termTheme).background) // the pane around the terminal follows the preset
 }
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = '') => {
@@ -84,6 +86,13 @@ export function createSettings(panel: HTMLElement, initial: Settings, onChange: 
     sel.onchange = () => { s = { ...s, termFontFamily: sel.value }; emit() }
     return row('Terminal font', sel)
   }
+  const themeSelect = () => {
+    const sel = el('select')
+    for (const t of TERM_THEMES) { const op = el('option', '', t.label); op.value = t.id; sel.append(op) }
+    sel.value = TERM_THEMES.some((t) => t.id === s.termTheme) ? s.termTheme : 'default'
+    sel.onchange = () => { s = { ...s, termTheme: sel.value }; emit() }
+    return row('Terminal colours', sel)
+  }
   const color = (label: string, key: StateKey) => {
     const sw = el('button', 'swatch')
     sw.type = 'button'
@@ -131,6 +140,7 @@ export function createSettings(panel: HTMLElement, initial: Settings, onChange: 
         toggle('Restart crashed chats automatically', 'autoResume'),
         toggle('Smooth motion', 'motion'),
         fontSelect(),
+        themeSelect(),
         slider('Terminal text', 'termFont', 10, 18, 1)),
       section('Shortcuts', ...SHORTCUTS.map(([keys, what]) => {
         const r = el('div', 'row')
