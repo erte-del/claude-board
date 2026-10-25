@@ -31,6 +31,14 @@ module.exports = async function (t) {
   t.check('status is "working" while the chat produces output', !!(await t.waitFor(async () => (await info(id)).status === 'working', { timeout: 4000, every: 150 })))
   t.check('and returns to idle afterwards', !!(await t.waitFor(async () => (await info(id)).status === 'idle', { timeout: 12000 })))
 
+  // ---- permission mode badge, read off the status line
+  { const modeBadge = () => t.js(`(()=>{const m=document.querySelector('.card .mode'); return m && !m.hidden ? [m.textContent, m.classList.contains('risky')] : null})()`)
+    t.check('the card shows the permission mode, and auto is flagged as risky', !!(await t.waitFor(async () => JSON.stringify(await modeBadge()) === '["auto",true]', { timeout: 4000 })), JSON.stringify(await modeBadge()))
+    await t.say(id, 'mode manual')
+    t.check('the main process reads the new mode off the status line', !!(await t.waitFor(async () => (await info(id)).permMode === 'manual', { timeout: 5000 })), (await info(id)).permMode)
+    t.check('switching to manual mode updates the badge and drops the risky look', !!(await t.waitFor(async () => JSON.stringify(await modeBadge()) === '["manual",false]', { timeout: 5000 })), JSON.stringify(await modeBadge()))
+    await t.say(id, 'mode auto'); await t.waitFor(async () => (await info(id)).permMode === 'auto', { timeout: 5000 }) }
+
   // ---- keep-awake: set through the real Customize control, observed on Electron's powerSaveBlocker
   { const { powerSaveBlocker } = require('electron')
     const blocking = () => { for (let i = 0; i < 100; i++) if (powerSaveBlocker.isStarted(i)) return true; return false }

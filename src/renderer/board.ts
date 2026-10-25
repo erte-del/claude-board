@@ -2,6 +2,7 @@ import { formatTokens, formatUsd } from '../pricing.mts'
 import { hubSpot, ringOffset, type Placed } from '../placement.mts'
 import { formatCountdown } from '../reset.mts'
 import { matches } from '../filter.mts'
+import type { PermMode } from '../screen.mts'
 import { cycle, nextInDirection, type Dir } from '../nav.mts'
 import { emptyLayout, type ChatInfo, type Layout, type Pt, type SubInfo } from '../types'
 
@@ -17,7 +18,7 @@ const GRID = 24 // dot-grid spacing
 type Handlers = { open(chatId: string, beside?: boolean): void; resume(sessionId: string, beside?: boolean): void; kill(chatId: string): void; newIn(cwd: string): void; answer(chatId: string, question: string, yes: boolean): void; save(l: Layout): void }
 type MiniEls = { el: HTMLElement; title: HTMLElement; feed: HTMLElement; feedSig: string }
 type CardEls = {
-  card: HTMLElement; idx: HTMLElement; kill: HTMLElement; name: HTMLElement; nameInput: HTMLInputElement; use: HTMLElement; ctx: HTMLElement; cost: HTMLElement; bar: HTMLElement; model: HTMLElement; branch: HTMLElement; tps: HTMLElement; feed: HTMLElement; ask: HTMLElement; feedSig: string
+  card: HTMLElement; idx: HTMLElement; kill: HTMLElement; name: HTMLElement; nameInput: HTMLInputElement; use: HTMLElement; ctx: HTMLElement; cost: HTMLElement; bar: HTMLElement; model: HTMLElement; branch: HTMLElement; mode: HTMLElement; tps: HTMLElement; feed: HTMLElement; ask: HTMLElement; feedSig: string
   subs: HTMLElement; minis: Map<string, MiniEls>; line: SVGPathElement
 }
 type Drag = { kind: 'card' | 'hub' | 'pan'; key: string; start: Pt; orig: Pt; moved: boolean; shift: boolean; onClick?: (shift: boolean) => void }
@@ -43,6 +44,8 @@ function sizeOf(c: ChatInfo, titled: boolean) {
     h: CARD_H + extra + Math.ceil(k / cols) * (MINI_H + MINI_GAP) + 4,
   }
 }
+
+const MODE_LABEL: Record<PermMode, string> = { manual: 'manual', auto: 'auto', 'accept-edits': 'edits', plan: 'plan', bypass: 'bypass' }
 
 export function createBoard(root: HTMLElement, h: Handlers) {
   const world = el('div', 'world')
@@ -235,10 +238,10 @@ export function createBoard(root: HTMLElement, h: Handlers) {
   // ---- elements
   function makeCard(key: string): CardEls {
     const card = el('div', 'card enter no-anim')
-    const model = el('span', 'model'), dot = el('span', 'dot'), branch = el('span', 'branch'), tps = el('span', 'tps'), feed = el('div', 'feed'), subs = el('div', 'subs')
+    const model = el('span', 'model'), dot = el('span', 'dot'), branch = el('span', 'branch'), mode = el('span', 'mode'), tps = el('span', 'tps'), feed = el('div', 'feed'), subs = el('div', 'subs')
     const head = el('div', 'head'), sub = el('div', 'sub')
     head.append(model, dot)
-    sub.append(branch, tps)
+    sub.append(branch, mode, tps)
     const name = el('div', 'name')
     const nameInput = el('input', 'name-input')
     nameInput.maxLength = 60
@@ -287,7 +290,7 @@ export function createBoard(root: HTMLElement, h: Handlers) {
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'path')
     line.classList.add('no-anim')
     svg.append(line)
-    return { card, idx, kill, name, nameInput, use, ctx, cost, bar, model, branch, tps, feed, ask, feedSig: '\0', subs, minis: new Map(), line }
+    return { card, idx, kill, name, nameInput, use, ctx, cost, bar, model, branch, mode, tps, feed, ask, feedSig: '\0', subs, minis: new Map(), line }
   }
 
   function makeMini(): MiniEls {
@@ -394,6 +397,10 @@ export function createBoard(root: HTMLElement, h: Handlers) {
           (c.costUSD === null ? '\nCost: not shown (no verified price for this model)' : '\nCost: estimated from token usage')
       e.model.textContent = c.model ? c.model.replace(/^claude-/, '') : '—'
       e.branch.textContent = `⎇ ${c.branch ?? '—'}`
+      e.mode.hidden = !c.permMode || c.status === 'ended'
+      e.mode.textContent = c.permMode ? MODE_LABEL[c.permMode] : ''
+      e.mode.className = `mode${c.permMode === 'auto' || c.permMode === 'bypass' ? ' risky' : ''}`
+      e.mode.title = 'Permission mode (shift+tab in the chat cycles it)'
       if (c.status === 'limit') { // in place of tokens/s: how long until the limit lifts
         e.tps.textContent = c.limitResetAt ? `↻ ${formatCountdown(c.limitResetAt - Date.now())}` : 'limit'
         e.tps.title = c.limitResetAt ? `Limit lifts ${new Date(c.limitResetAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : 'Usage limit reached'

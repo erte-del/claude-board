@@ -157,6 +157,8 @@ badge: the number of chats waiting, or `!` while a limit is hit. Nothing is show
 
 **Keep Mac awake** (Customize → Off / When working / Always) stops the Mac from sleeping, so long chats aren't cut off. "When working" only holds it while a chat is producing output. It is off by default; the display may still sleep.
 
+**Permission mode** (`manual`, `auto`, `edits`, `plan`, `bypass`) is read from Claude Code's status line and shown as a small tag on the card; `auto` and `bypass` are drawn in red. Shift+Tab inside the chat cycles it.
+
 ### Inside a chat
 
 - **Split view:** two chats side by side, each a live terminal. Click a pane to focus it (its header gets an underline and the

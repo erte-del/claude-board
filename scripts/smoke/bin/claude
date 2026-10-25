@@ -6,6 +6,7 @@
 //   limit S      hit a usage limit that lifts at the next whole minute at least S seconds away
 //   agent        start a sub-agent that finishes after a few seconds
 //   crash        print an error and exit with code 1
+//   mode NAME    switch the permission mode shown on the status line (manual, auto, accept-edits, plan, bypass)
 //   quiet        report $BROWSER and the first PATH folder (the no-focus shim)
 //   exit         exit normally
 //   anything else: replies "echo: <text>"
@@ -37,7 +38,9 @@ const assistant = (text) => append({ type: 'assistant', message: { id: `msg_${si
 
 write('\x1b[?2004h') // bracketed paste on, like the real one
 write(`Stub Claude Code · ${path.basename(cwd)}${resumed ? ' · resumed' : ''}\r\nSonnet 5.5 · Claude Max\r\n`)
-const prompt = () => write('\r\n❯ ')
+let permMode = 'auto' // the status line the real one prints under the prompt (here above it, so the cursor stays on the prompt)
+const STATUS = { manual: '⏸ manual mode on', auto: '⏵⏵ auto mode on (shift+tab to cycle)', 'accept-edits': '⏵⏵ accept edits on (shift+tab to cycle)', plan: '⏸ plan mode on (shift+tab to cycle)', bypass: '⏵⏵ bypass permissions on (shift+tab to cycle)' }
+const prompt = () => write(`\r\n${STATUS[permMode]}\r\n❯ `)
 prompt()
 
 let line = ''
@@ -54,6 +57,7 @@ function submit(text) {
   write('\r\n')
   user(text)
   const [cmd, arg] = text.trim().split(/\s+/)
+  if (cmd === 'mode' && STATUS[arg]) { permMode = arg; return reply(`mode: ${arg}`) }
   if (cmd === 'quiet') return reply(`quiet: ${process.env.BROWSER} first=${process.env.PATH.split(':')[0]}`)
   if (cmd === 'exit') process.exit(0)
   if (cmd === 'crash') { process.stderr.write('fatal: stub crash\n'); process.exit(1) }

@@ -2,6 +2,7 @@
 // idle = turn finished; limit = a usage limit was hit (applies to every live chat); ended = process exited
 export type Status = 'working' | 'idle' | 'waiting' | 'limit' | 'ended'
 export type SubInfo = { id: string; title: string; status: Status; feed: string[] }
+import type { PermMode } from './screen.mts'
 export type ChatInfo = {
   id: string
   cwd: string
@@ -16,6 +17,7 @@ export type ChatInfo = {
   contextTokens: number | null // size of the latest request (what's in the window now)
   contextWindow: number | null // window of that model, if known
   costUSD: number | null // estimated spend, only for models with a verified price
+  permMode: PermMode | null // from Claude Code's status line; null until it has been seen
   prompt: string | null // a tool-permission question the card can answer with Yes / No buttons, while waiting on one
   resumable: boolean // ended (or restored from a previous run) and has a transcript, so a click can resume it
 }

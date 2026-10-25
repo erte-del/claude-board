@@ -120,6 +120,9 @@ button.toggle.on { background: var(--accent); border-color: transparent; color: 
 .s-ended > .head .dot, .s-ended > .mini-head .dot, .dot.s-ended { background: var(--c-ended); }
 .card .sub { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 0.95em; }
 .card .branch { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .mode { flex: none; margin-left: auto; padding: 0 5px; border: 1px solid currentColor; border-radius: 6px; font-size: 0.85em; line-height: 1.4; }
+.card .mode[hidden] { display: none; }
+.card .mode.risky { color: var(--c-limit); }
 .card .tps { flex: none; font-variant-numeric: tabular-nums; }
 .use { display: flex; justify-content: space-between; gap: 8px; margin-top: 1px; color: var(--muted); font-size: 0.95em; font-variant-numeric: tabular-nums; }
 .bar { height: 3px; border-radius: 2px; background: var(--line); flex: none; overflow: hidden; }

@@ -11,6 +11,16 @@ export const modelFromScreen = (screenLines: string[]): string | null => {
   return m ? `claude-${m[1].toLowerCase()}-${m[2].replace('.', '-')}` : null
 }
 
+export type PermMode = 'manual' | 'auto' | 'accept-edits' | 'plan' | 'bypass'
+// Only "auto mode on" and "manual mode on" are verified against a real claude; the other three are from memory of its status line.
+const MODES: [RegExp, PermMode][] = [[/[⏵⏸]\s*auto mode on\b/i, 'auto'], [/[⏵⏸]\s*manual mode on\b/i, 'manual'], [/[⏵⏸]\s*accept edits on\b/i, 'accept-edits'], [/[⏵⏸]\s*plan mode on\b/i, 'plan'], [/[⏵⏸]\s*bypass permissions on\b/i, 'bypass']]
+
+/** permissionMode: the mode named on Claude Code's status line ("⏵⏵ auto mode on (shift+tab to cycle)"), from the last row that names one. Null if none shows. */
+export const permissionMode = (screenLines: string[]): PermMode | null => {
+  for (const l of [...screenLines].reverse()) for (const [re, m] of MODES) if (re.test(l)) return m
+  return null
+}
+
 export type Permission = { question: string; yes: string; no: string }
 
 const OPTION = /^[❯>]?\s*(\d+)\.\s+(.+)$/

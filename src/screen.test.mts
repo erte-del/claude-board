@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { waitingForUser } from './screen.mts'
+import { permissionMode, waitingForUser } from './screen.mts'
 
 test('recognises question, permission and trust dialogs', () => {
   assert.ok(waitingForUser(['Do you prefer red or blue?', '❯ 1. Red', '  2. Blue', 'Enter to select · ↑/↓ to navigate · Esc to cancel']))
@@ -37,4 +37,15 @@ test('permissionPrompt refuses anything it cannot be sure of', async () => {
   assert.equal(permissionPrompt(['Do you want to proceed?', '❯ 1. Yes', '  3. No']), null) // gap in the numbering
   assert.equal(permissionPrompt(['Do you want to proceed?', '❯ 1. Yes']), null) // only one option: not a dialog
   assert.equal(permissionPrompt(['Do you want to proceed?', '❯ 1. Yes', '  2. No', '', 'Do you want to proceed?']), null) // newest question has no options yet
+})
+
+test('permissionMode reads the mode off the status line (strings from a real claude: auto, manual)', () => {
+  assert.equal(permissionMode(['❯ ', '⏵⏵ auto mode on (shift+tab to cycle)']), 'auto')
+  assert.equal(permissionMode(['❯ ', '⏸ manual mode on']), 'manual')
+  assert.equal(permissionMode(['⏵⏵ accept edits on (shift+tab to cycle)']), 'accept-edits')
+  assert.equal(permissionMode(['⏸ plan mode on (shift+tab to cycle)']), 'plan')
+  assert.equal(permissionMode(['⏵⏵ bypass permissions on (shift+tab to cycle)']), 'bypass')
+  assert.equal(permissionMode(['⏸ manual mode on', '⏵⏵ auto mode on']), 'auto') // the lowest row wins
+  assert.equal(permissionMode(['Do you want to proceed?', '❯ 1. Yes']), null) // a dialog hides the line
+  assert.equal(permissionMode(['we should turn auto mode on later']), null)
 })
