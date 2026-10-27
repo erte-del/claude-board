@@ -20,6 +20,7 @@ import { sanitizeRegistry, type RegEntry } from './registry.mts'
 import { SubagentWatcher, Tailer } from './tailer.mts'
 import { modelFromScreen, dialogKind, permissionMode, permissionPrompt, waitingForUser, type PermMode, type WaitKind } from './screen.mts'
 import { createLogger } from './logger.mts'
+import { isWorking, newActivity, record, type Activity } from './activity.mts'
 import { badgeText, isStalled, inQuietHours, planContext, planFinished, planLimitReset, planNotifications, wantAwake, type CtxLevel } from './attention.mts'
 import { CONTEXT_WINDOW } from './pricing.mts'
 import { restoreBounds } from './windowstate.mts'
@@ -36,7 +37,7 @@ if (app.isPackaged && !app.commandLine.hasSwitch('user-data-dir')) app.setPath('
 
 type Chat = {
   id: string; pty: pty.IPty; cwd: string; sessionId: string; status: Status; buffer: string
-  lastData: number // last pty output that was not an echo of our own input
+  activity: Activity // pty output that was not an echo of our own input; sustained output reads as working
   lastInput: number
   tailer: Tailer
   subs: SubagentWatcher
@@ -199,7 +200,7 @@ function spawnChat(folder: string, args: string[], sessionId: string, resumed = 
   const p = pty.spawn(claudePath, args, { name: 'xterm-256color', cols: 80, rows: 24, cwd, env })
   log(`start pid=${p.pid} cwd=${cwd} ${args.join(' ')}`)
   const file = transcriptFile(cwd, sessionId)
-  const chat: Chat = { id, pty: p, cwd, sessionId, status: 'working', buffer: '', lastData: Date.now(), lastInput: 0, tailer: new Tailer(file), subs: new SubagentWatcher(path.join(path.dirname(file), sessionId, 'subagents')), screen: new Terminal({ cols: 80, rows: 24, allowProposedApi: true }), gitBranch: null, killed: false, seenReply: null, workingSince: null, forked: false, ctxLevel: null, waitKind: null, crashed: false, endNote: null, screenModel: null, permMode: null, prev: undefined }
+  const chat: Chat = { id, pty: p, cwd, sessionId, status: 'working', buffer: '', activity: newActivity(), lastInput: 0, tailer: new Tailer(file), subs: new SubagentWatcher(path.join(path.dirname(file), sessionId, 'subagents')), screen: new Terminal({ cols: 80, rows: 24, allowProposedApi: true }), gitBranch: null, killed: false, seenReply: null, workingSince: null, forked: false, ctxLevel: null, waitKind: null, crashed: false, endNote: null, screenModel: null, permMode: null, prev: undefined }
   if (resumed) { chat.tailer.catchUp(); chat.subs.catchUp() } // history is shown; its stale limit / pending-tool state is not
   // Branch for the card before the first transcript entry exists.
   execFile('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], (err, out) => { if (!err) chat.gitBranch = out.trim() })
@@ -207,8 +208,7 @@ function spawnChat(folder: string, args: string[], sessionId: string, resumed = 
     // shortcut: slicing can cut an escape sequence in half at the buffer head; harmless in practice, fix if replay glitches
     chat.buffer = (chat.buffer + d).slice(-MAX_BUFFER)
     chat.screen.write(d)
-    // Output right after a keystroke/resize is the terminal echoing or redrawing, not Claude working.
-    if (Date.now() - chat.lastInput > 300) chat.lastData = Date.now()
+    record(chat.activity, Date.now(), chat.lastInput)
     if (attached.has(id)) send('pty:data', id, d)
   })
   p.onExit(async ({ exitCode, signal }) => {
@@ -335,7 +335,7 @@ function tick() {
   limitResetAt = limited && resets.length ? Math.min(...resets) : null
   for (const c of live) {
     c.status = limited ? 'limit'
-      : Date.now() - c.lastData < 2000 ? 'working'
+      : isWorking(c.activity, Date.now()) ? 'working'
       : waitingForUser(screenBottom(c)) || c.tailer.state.pending.size > 0 ? 'waiting'
       : 'idle'
   }

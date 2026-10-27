@@ -5,6 +5,7 @@
 //   question     show a question dialog (options + "Enter to select" footer)
 //   trust        show the folder-trust dialog (unnumbered options)
 //   sleep N      show a working spinner for N seconds, then reply
+//   statusbar N  repaint a status line in the bottom-right corner every 10s for N seconds (what the real status line does), no spinner
 //   limit S      hit a usage limit that lifts at the next whole minute at least S seconds away
 //   agent        start a sub-agent that finishes after a few seconds
 //   crash        print an error and exit with code 1
@@ -104,6 +105,14 @@ function submit(text) {
       if (Date.now() >= until) { clearInterval(t); reply('done sleeping') }
     }, 200)
     return
+  }
+  if (cmd === 'statusbar') {
+    const until = Date.now() + (Number(arg) || 25) * 1000
+    let n = 0
+    const repaint = () => write(`\x1b7\x1b[24;1H${`status ${++n}`.padEnd(60)}\x1b8`) // ~70 bytes, like the real one
+    repaint()
+    const t = setInterval(() => { if (Date.now() >= until) return clearInterval(t); repaint() }, 10000)
+    return reply('status line on')
   }
   if (cmd === 'limit') {
     const reset = new Date(Math.ceil((Date.now() + (Number(arg) || 20) * 1000) / 60000) * 60000)

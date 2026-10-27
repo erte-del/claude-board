@@ -31,6 +31,7 @@ module.exports = async function (t) {
   t.check('status is "working" while the chat produces output', !!(await t.waitFor(async () => (await info(id)).status === 'working', { timeout: 4000, every: 150 })))
   t.check('and returns to idle afterwards', !!(await t.waitFor(async () => (await info(id)).status === 'idle', { timeout: 12000 })))
 
+
   // ---- permission mode badge, read off the status line
   { const modeBadge = () => t.js(`(()=>{const m=document.querySelector('.card .mode'); return m && !m.hidden ? [m.textContent, m.classList.contains('risky')] : null})()`)
     t.check('the card shows the permission mode, and auto is flagged as risky', !!(await t.waitFor(async () => JSON.stringify(await modeBadge()) === '["auto",true]', { timeout: 4000 })), JSON.stringify(await modeBadge()))
@@ -430,4 +431,13 @@ module.exports = async function (t) {
     t.spy.writes.length = 0
     await drag(0)
     t.check('after Shift is released the program gets the mouse again', reports().length > 2, String(reports().length)) }
+
+  // ---- a status line that repaints on a timer is not work: idle stays idle, a real prompt still goes green
+  await t.say(id, 'statusbar 25')
+  const seen = []
+  for (const end = Date.now() + 24000; Date.now() < end; await t.sleep(150)) seen.push((await info(id)).status)
+  t.check('an idle chat whose status line repaints every 10s stays idle', !seen.includes('working') && seen.length > 100, JSON.stringify([...new Set(seen)]))
+  await t.say(id, 'sleep 3')
+  t.check('a real prompt still turns it working', !!(await t.waitFor(async () => (await info(id)).status === 'working', { timeout: 4000, every: 150 })))
+  t.check('and it returns to idle afterwards', !!(await t.waitFor(async () => (await info(id)).status === 'idle', { timeout: 12000 })))
 }
