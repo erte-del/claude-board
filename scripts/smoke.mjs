@@ -24,7 +24,8 @@ const SCENARIOS = [
   { name: 'tour' },
   { name: 'persist-1', strictQuit: true }, // this one tests the real quit path: the app must exit by itself
   { name: 'persist-2' },
-  { name: 'limit', slow: true },
+  { name: "reconnect" },
+  { name: "limit", slow: true },
 ]
 
 // Two runs at once (another terminal, another chat) steal each other's window focus and see each other's stand-in claude processes,

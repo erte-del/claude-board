@@ -17,7 +17,7 @@ const MINI_W = 150, MINI_H = 74, MINI_GAP = 6, CARD_PAD = 12
 let SPAN = 230, MIN_RING = 250 // nominal spacing between neighbours on a ring, and the smallest ring radius (follow the card width)
 const GRID = 24 // dot-grid spacing
 
-type Handlers = { open(chatId: string, beside?: boolean): void; resume(sessionId: string, beside?: boolean): void; kill(chatId: string): void; restart(sessionId: string): void; fork(sessionId: string): void; folder(sessionId: string, how: string): void; newIn(cwd: string): void; answer(chatId: string, question: string, yes: boolean): void; save(l: Layout): void }
+type Handlers = { picked?(): void; open(chatId: string, beside?: boolean): void; resume(sessionId: string, beside?: boolean): void; kill(chatId: string): void; restart(sessionId: string): void; fork(sessionId: string): void; folder(sessionId: string, how: string): void; newIn(cwd: string): void; answer(chatId: string, question: string, yes: boolean): void; save(l: Layout): void }
 type MiniEls = { el: HTMLElement; title: HTMLElement; feed: HTMLElement; feedSig: string }
 type CardEls = {
   card: HTMLElement; idx: HTMLElement; kill: HTMLElement; mute: HTMLElement; pin: HTMLElement; noteBtn: HTMLElement; note: HTMLElement; noteInput: HTMLInputElement; name: HTMLElement; nameInput: HTMLInputElement; use: HTMLElement; ctx: HTMLElement; cost: HTMLElement; bar: HTMLElement; model: HTMLElement; branch: HTMLElement; mode: HTMLElement; tps: HTMLElement; feed: HTMLElement; ask: HTMLElement; restart: HTMLElement; feedSig: string
@@ -75,6 +75,9 @@ export function createBoard(root: HTMLElement, h: Handlers) {
   let editingNote: string | null = null // sessionId of the card whose note is being edited
   let query = '' // board filter text (not saved)
   let statuses = new Set<string>() // status chips that are on (not saved); none = every status
+  let pickMode = false
+  const picked = new Set<string>() // sessionIds ticked in reconnect mode
+  const revivable = (c: ChatInfo) => c.status === 'ended' && c.resumable && isVisible(c)
   let selected: string | null = null // keyboard-selected card (sessionId)
   const cards = new Map<string, CardEls>()
   const hubs = new Map<string, HTMLElement>()
@@ -377,7 +380,7 @@ export function createBoard(root: HTMLElement, h: Handlers) {
     card.append(name, nameInput, note, noteInput, head, sub, use, meter, el('hr'), feed, ask, subs, alert, idx, rename, mute, fork, pin, noteBtn, kill)
     card.onpointerdown = (e) => {
       const c = chats.find((x) => x.sessionId === key)
-      if (c) startDrag(e, { kind: 'card', key, orig: { ...layout.cards[key] }, onClick: (shift) => activate(c, shift) })
+      if (c) startDrag(e, { kind: 'card', key, orig: { ...layout.cards[key] }, onClick: (shift) => { if (!pickMode) return activate(c, shift); if (revivable(c)) { if (!picked.delete(key)) picked.add(key); schedule(); h.picked?.() } } })
     }
     world.append(card)
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'path')
@@ -487,6 +490,8 @@ export function createBoard(root: HTMLElement, h: Handlers) {
       e.card.classList.toggle('gone', !vis)
       e.card.classList.toggle('dim', vis && dim)
       e.card.classList.toggle('sel', selected === c.sessionId && vis)
+      e.card.classList.toggle('pickable', pickMode && revivable(c))
+      e.card.classList.toggle('picked', picked.has(c.sessionId))
       const n = order().indexOf(c.sessionId)
       e.idx.textContent = n >= 0 && n < 9 ? `⌘${n + 1}` : ''
       e.card.style.width = `${size.w}px`
@@ -588,6 +593,10 @@ export function createBoard(root: HTMLElement, h: Handlers) {
   }
 
   return {
+    setPickMode(on: boolean) { pickMode = on; picked.clear(); root.classList.toggle('picking', on); schedule() },
+    /** Tick every revivable card, or clear them all when they already are all ticked. */
+    pickAll() { const all = chats.filter(revivable).map((c) => c.sessionId); if (all.every((k) => picked.has(k))) picked.clear(); else all.forEach((k) => picked.add(k)); schedule() },
+    pickState() { const all = chats.filter(revivable); return { picked: [...picked].filter((k) => all.some((c) => c.sessionId === k)), total: all.length } },
     setChats(c: ChatInfo[]) { chats = c; schedule() },
     setLayout(l: Layout) {
       layout = { ...emptyLayout(), ...l, titles: l.titles ?? {} }

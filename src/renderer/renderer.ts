@@ -176,7 +176,7 @@ function toggleSplitMenu() {
 }
 $('split').onclick = toggleSplitMenu
 
-const board = createBoard($('board'), { open: openFromBoard, resume: resumeFromBoard, kill: (id) => void api.killChat(id).then((removed) => { if (removed !== null) toast(`Removed ${removed}`, 'Undo', undoRemove) }), folder: (s, how) => void api.openFolder(s, how).then((r) => { if (!r.ok) toast(r.error); else if (how === 'copy') toast('Path copied') }), fork: (s) => void api.forkChat(s).then((r) => { if (!r.ok) showError(r.error) }), restart: (s) => void api.resumeChat(s).then((r) => { if (!r.ok) showError(r.error) }), newIn: (cwd) => void startChat(cwd), answer: (id, q, yes) => void api.answerPrompt(id, q, yes ? 'yes' : 'no'), save: (l) => void api.saveLayout(l) })
+const board = createBoard($('board'), { picked: syncPick, open: openFromBoard, resume: resumeFromBoard, kill: (id) => void api.killChat(id).then((removed) => { if (removed !== null) toast(`Removed ${removed}`, 'Undo', undoRemove) }), folder: (s, how) => void api.openFolder(s, how).then((r) => { if (!r.ok) toast(r.error); else if (how === 'copy') toast('Path copied') }), fork: (s) => void api.forkChat(s).then((r) => { if (!r.ok) showError(r.error) }), restart: (s) => void api.resumeChat(s).then((r) => { if (!r.ok) showError(r.error) }), newIn: (cwd) => void startChat(cwd), answer: (id, q, yes) => void api.answerPrompt(id, q, yes ? 'yes' : 'no'), save: (l) => void api.saveLayout(l) })
 
 // ---- settings: applied live, saved shortly after the last change
 let saveTimer = 0
@@ -223,6 +223,30 @@ filter.onkeydown = (e) => {
 }
 hideEnded.onclick = () => { board.setHideEnded(!board.hideEnded()); syncHideEnded(); refreshCount() }
 
+// ---- reconnect: tick ended chats, confirm to resume them all (in the background, no chat view opens)
+const reconnect = $('reconnect'), pickBar = $('pick-bar'), pickAll = $('pick-all'), pickGo = $<HTMLButtonElement>('pick-go')
+function syncPick() {
+  const { picked, total } = board.pickState()
+  pickAll.textContent = picked.length === total && total ? 'Deselect all' : 'Select all'
+  pickGo.textContent = picked.length ? `Confirm (${picked.length})` : 'Confirm'
+  pickGo.disabled = !picked.length
+}
+function setReconnect(on: boolean) {
+  board.setPickMode(on)
+  pickBar.hidden = !on
+  reconnect.textContent = on ? 'Cancel' : 'Reconnect'
+  reconnect.classList.toggle('on', on)
+  syncPick()
+}
+reconnect.onclick = () => setReconnect(!reconnect.classList.contains("on"))
+pickAll.onclick = () => { board.pickAll(); syncPick() }
+pickGo.onclick = async () => {
+  const ids = board.pickState().picked
+  setReconnect(false)
+  const results = await Promise.all(ids.map((s) => api.resumeChat(s)))
+  const failed = results.flatMap((r) => (r.ok ? [] : [r.error]))
+  toast(failed.length ? `Reconnected ${ids.length - failed.length}, ${failed.length} failed: ${failed[0]}` : `Reconnected ${ids.length} chat${ids.length === 1 ? '' : 's'}`)
+}
 $('arrange').onclick = () => board.arrange()
 $('gear').onclick = () => { closePopover(); drawer.toggle() }
 
@@ -307,7 +331,7 @@ $('board').addEventListener('pointerdown', () => { closePopover(); drawer.close(
 
 api.onPtyData((id, d) => chatPanes.write(id, d))
 api.onOpenChat((id) => { const c = chats.find((x) => x.id === id); if (c) void showChat(c.id) }) // a notification was clicked
-api.onChatsChanged((c) => { chats = c; board.setChats(c); syncBar(); refreshCount() })
+api.onChatsChanged((c) => { chats = c; board.setChats(c); syncBar(); refreshCount(); syncPick() })
 $('back').onclick = back
 
 // ⌘1-9: jump to the nth chat from anywhere, including from inside another chat. Holding ⌘ shows the numbers.
