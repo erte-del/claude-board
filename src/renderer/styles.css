@@ -347,3 +347,11 @@ kbd { font: 11px var(--font-mono); color: var(--muted); background: var(--btn); 
 .menu-msg { padding: 12px 10px; color: var(--muted); }
 
 select { background: var(--btn); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 3px 6px; font: inherit; max-width: 170px; }
+
+/* reconnect mode: ended chats can be ticked; everything else is dimmed */
+#pick-bar { display: inline-flex; gap: 6px; }
+#pick-bar[hidden] { display: none; }
+#pick-go:disabled { opacity: 0.4; }
+.picking .card:not(.pickable) { opacity: 0.35; pointer-events: none; }
+.card.pickable { outline: 2px dashed var(--muted); outline-offset: 4px; }
+.card.picked { outline: 2px solid var(--accent); }
