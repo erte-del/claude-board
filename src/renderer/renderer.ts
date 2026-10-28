@@ -190,6 +190,7 @@ function onSettings(s: Settings, persist = true) {
 }
 const drawer = createSettings($('settings'), settings, onSettings, {
   export: () => void api.loadLayout().then((l) => api.exportLayout(l)).then((r) => { if (r.ok) toast('Layout exported'); else if (r.error) toast(r.error) }),
+  importColors: () => api.importTermColors().then((r) => { if (r.ok) { toast(`Imported ${r.name}`); return { name: r.name, theme: r.theme } } if (r.error) toast(r.error); return null }),
   tour: () => { drawer.close(); openTour(() => void api.markTourSeen()) },
   import: () => void api.importLayout().then((r) => { if (r.ok) { board.setLayout(r.layout); toast('Layout imported') } else if (r.error) toast(r.error) }),
 })

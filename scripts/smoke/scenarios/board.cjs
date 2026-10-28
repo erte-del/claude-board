@@ -209,6 +209,23 @@ module.exports = async function (t) {
     // put the first layout back so later checks see what they expect
     fs.writeFileSync(edited, JSON.stringify(before)); t.picked.open = edited; await btn('Import…'); await settle(700); t.picked.open = null }
 
+  // ---- importing an iTerm colour file
+  { const fs = require('fs'), path = require('path')
+    const btn = (label) => t.js(`[...document.querySelectorAll('#settings button')].find(b=>b.textContent===${JSON.stringify(label)}).click()`)
+    const toast = () => t.js(`document.getElementById('toast').textContent`)
+    const c = (r, g, b) => `<dict><key>Blue Component</key><real>${b}</real><key>Green Component</key><real>${g}</real><key>Red Component</key><real>${r}</real></dict>`
+    const plist = `<?xml version="1.0"?><plist><dict>${Array.from({ length: 16 }, (_, i) => `<key>Ansi ${i} Color</key>${c(i / 15, 0.5, 0)}`).join('')}<key>Background Color</key>${c(0.2, 0.4, 0.6)}<key>Foreground Color</key>${c(1, 1, 1)}</dict></plist>`
+    const file = path.join(t.data, 'Smoke Night.itermcolors'), bad = path.join(t.data, 'bad.itermcolors')
+    fs.writeFileSync(file, plist); fs.writeFileSync(bad, '<plist><dict></dict></plist>')
+    t.picked.open = bad; await btn('Import iTerm…'); await settle(500)
+    t.check('a colour file without the colours is refused and changes nothing', /isn't an iTerm colour file/.test(await toast()) && !(t.readJson('settings.json') || {}).termImported)
+    t.picked.open = file; await btn('Import iTerm…'); await settle(900)
+    const saved = t.readJson('settings.json') || {}
+    t.check('importing an .itermcolors file saves it and selects it', saved.termTheme === 'imported' && saved.termImported?.name === 'Smoke Night' && saved.termImported?.theme?.background === '#336699' && /Imported Smoke Night/.test(await toast()), JSON.stringify(saved.termImported || {}).slice(0, 100))
+    t.check('the terminal pane follows the imported background', (await t.js(`getComputedStyle(document.documentElement).getPropertyValue('--term-bg').trim()`)) === '#336699')
+    t.picked.open = null
+    await t.js(`(() => { const s = [...document.querySelectorAll('#settings select')].find(x => [...x.options].some(o => o.value === 'imported')); s.value = 'default'; s.dispatchEvent(new Event('change')) })()`); await settle(500) }
+
   // ---- window settings reach the real window
   { const { globalShortcut } = require('electron')
     const row = (label) => `[...document.querySelectorAll('#settings .row')].find(r=>r.textContent.startsWith(${JSON.stringify(label)}))`

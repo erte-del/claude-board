@@ -10,6 +10,7 @@ import * as pty from 'node-pty'
 import { Terminal } from '@xterm/headless'
 import { encodeCwd, scanSessions, type SessionInfo } from './scanner.mts'
 import { sanitizeLayout } from './layoutio.mts'
+import { parseItermColors } from './itermcolors.mts'
 import { HOTKEY, winPrefs } from './winprefs.mts'
 import { pushRemoved, sanitizeRemoved, takeRestorable, type Removed } from './removed.mts'
 import { EDITORS, installedEditors } from './editors.mts'
@@ -476,6 +477,16 @@ ipcMain.handle('importLayout', async (): Promise<{ ok: true; layout: Layout } | 
     muted = layout.muted ?? {}
     await writeJson('board-layout.json', layout)
     return { ok: true, layout }
+  } catch (e) { return { ok: false, error: `Couldn't read that file: ${(e as Error).message}` } }
+})
+ipcMain.handle('importTermColors', async (): Promise<{ ok: true; name: string; theme: Record<string, string> } | { ok: false; error?: string }> => {
+  const r = await dialog.showOpenDialog(win!, { title: 'Import iTerm colours', properties: ['openFile'], filters: [{ name: 'iTerm colours', extensions: ['itermcolors'] }] })
+  if (r.canceled || !r.filePaths[0]) return { ok: false }
+  try {
+    if (statSync(r.filePaths[0]).size > 1_000_000) return { ok: false, error: 'That file is too big to be a colour scheme.' }
+    const theme = parseItermColors(readFileSync(r.filePaths[0], 'utf8'))
+    if (!theme) return { ok: false, error: "That isn't an iTerm colour file (or it lacks the background, text or 16 ANSI colours)." }
+    return { ok: true, name: path.basename(r.filePaths[0], '.itermcolors').slice(0, 40), theme }
   } catch (e) { return { ok: false, error: `Couldn't read that file: ${(e as Error).message}` } }
 })
 // Font files the user has installed (Chromium can't use ~/Library/Fonts by name, but it can load the files).

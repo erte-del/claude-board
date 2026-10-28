@@ -13,5 +13,18 @@ export const TERM_THEMES: { id: string; label: string; theme: TermTheme }[] = [
   { id: 'macos-light', label: 'macOS Light (Basic)', theme: { background: '#ffffff', foreground: '#000000', cursor: '#000000', selectionBackground: '#b3d7ff', ...ansi(['#000000', '#990000', '#00a600', '#999900', '#0000b2', '#b200b2', '#00a6b2', '#bfbfbf'], ['#666666', '#e50000', '#00d900', '#e5e500', '#0000ff', '#e500e5', '#00e5e5', '#e5e5e5']) } },
 ]
 
+export type ImportedTheme = { name: string; theme: TermTheme }
+export const IMPORTED_ID = 'imported'
+
+/** An imported theme as it was saved, trusted no further than settings.json: only known colour keys with #rrggbb values, and a background. */
+export function cleanTheme(raw: unknown): TermTheme | null {
+  if (!raw || typeof raw !== 'object') return null
+  const keys = new Set(Object.keys(TERM_THEMES[1].theme))
+  const out: TermTheme = {}
+  for (const [k, v] of Object.entries(raw)) if (keys.has(k) && typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v)) out[k] = v
+  return out.background ? out : null
+}
+
 /** The theme for a saved id; an unknown id (a preset removed later, a hand-edited file) falls back to the default. */
-export const termTheme = (id: string | undefined): TermTheme => (TERM_THEMES.find((t) => t.id === id) ?? TERM_THEMES[0]).theme
+export const termTheme = (id: string | undefined, imported?: ImportedTheme | null): TermTheme =>
+  (id === IMPORTED_ID && cleanTheme(imported?.theme)) || (TERM_THEMES.find((t) => t.id === id) ?? TERM_THEMES[0]).theme

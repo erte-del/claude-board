@@ -1,4 +1,4 @@
-import { TERM_THEMES, termTheme } from '../termthemes.mts'
+import { IMPORTED_ID, TERM_THEMES, termTheme, type ImportedTheme } from '../termthemes.mts'
 import { closePicker, openPicker } from './colorpicker'
 import { DEFAULT_TERM_FONT, defaultSettings, type KeepAwake, type Settings, type StateKey, type Theme } from '../types'
 
@@ -23,7 +23,7 @@ export function applySettings(s: Settings) {
   r.style.setProperty('--card-font', `${s.cardFont}px`)
   r.style.setProperty('--line-w', `${s.lineWidth}px`)
   r.classList.toggle('no-motion', !s.motion)
-  r.style.setProperty('--term-bg', termTheme(s.termTheme).background) // the pane around the terminal follows the preset
+  r.style.setProperty('--term-bg', termTheme(s.termTheme, s.termImported).background) // the pane around the terminal follows the preset
 }
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = '') => {
@@ -33,7 +33,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = '') 
   return e
 }
 
-export function createSettings(panel: HTMLElement, initial: Settings, onChange: (s: Settings) => void, layoutActions: { export(): void; import(): void; tour(): void }) {
+export function createSettings(panel: HTMLElement, initial: Settings, onChange: (s: Settings) => void, layoutActions: { export(): void; import(): void; tour(): void; importColors(): Promise<ImportedTheme | null> }) {
   let s = initial
   const emit = () => { applySettings(s); onChange(s) }
 
@@ -88,10 +88,17 @@ export function createSettings(panel: HTMLElement, initial: Settings, onChange: 
   }
   const themeSelect = () => {
     const sel = el('select')
-    for (const t of TERM_THEMES) { const op = el('option', '', t.label); op.value = t.id; sel.append(op) }
-    sel.value = TERM_THEMES.some((t) => t.id === s.termTheme) ? s.termTheme : 'default'
+    const presets: [string, string][] = [...TERM_THEMES.map((t): [string, string] => [t.id, t.label]), ...(s.termImported ? [[IMPORTED_ID, `Imported: ${s.termImported.name}`] as [string, string]] : [])]
+    for (const [id, label] of presets) { const op = el('option', '', label); op.value = id; sel.append(op) }
+    sel.value = presets.some(([id]) => id === s.termTheme) ? s.termTheme : 'default'
     sel.onchange = () => { s = { ...s, termTheme: sel.value }; emit() }
-    return row('Terminal colours', sel)
+    const im = el('button', '', 'Import iTerm…')
+    im.type = 'button'
+    im.title = 'Use the colours from an iTerm .itermcolors file'
+    im.onclick = () => void layoutActions.importColors().then((t) => { if (t) { s = { ...s, termImported: t, termTheme: IMPORTED_ID }; build(); emit() } })
+    const box = el('div', 'row-control')
+    box.append(sel, im)
+    return row('Terminal colours', box)
   }
   const color = (label: string, key: StateKey) => {
     const sw = el('button', 'swatch')

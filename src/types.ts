@@ -65,6 +65,7 @@ export type Settings = {
   hotkey: boolean // ⌃⌥B shows / hides the app from anywhere
   osc52: boolean // let programs in a chat put text on the clipboard (OSC 52), as Claude Code does when you copy
   termTheme: string // colour preset for the chat terminal (see termthemes.mts)
+  termImported: { name: string; theme: Record<string, string> } | null // colours imported from an .itermcolors file, picked as termTheme 'imported'
   termFontFamily: string // chat view font (DEFAULT_TERM_FONT = Terminal.app's SF Mono)
   notifications: boolean // macOS notification + Dock badge when a chat needs you
   quietLaunch: boolean // apps and URLs a chat opens stay behind the board (applies to chats started after the change)
@@ -95,6 +96,7 @@ export const defaultSettings: Settings = {
   hotkey: false,
   osc52: true,
   termTheme: 'default',
+  termImported: null,
   termFontFamily: 'Terminal (SF Mono)',
   notifications: true,
   quietLaunch: true,

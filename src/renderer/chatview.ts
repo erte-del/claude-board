@@ -139,7 +139,7 @@ export function createChatView(d: Deps) {
     el.append(head, body)
     d.wrap.append(el)
 
-    const term = new Terminal({ ...termOptions(s), cursorBlink: true, macOptionIsMeta: true, macOptionClickForcesSelection: true, allowProposedApi: true, scrollback: 5000, theme: termTheme(s.termTheme) })
+    const term = new Terminal({ ...termOptions(s), cursorBlink: true, macOptionIsMeta: true, macOptionClickForcesSelection: true, allowProposedApi: true, scrollback: 5000, theme: termTheme(s.termTheme, s.termImported) })
     const fit = new FitAddon()
     const search = new SearchAddon()
     term.loadAddon(fit)
@@ -308,7 +308,7 @@ export function createChatView(d: Deps) {
       for (const p of panes) {
         p.term.options.fontSize = s.termFont
         p.term.options.fontFamily = fontCss(s.termFontFamily)
-        p.term.options.theme = termTheme(s.termTheme)
+        p.term.options.theme = termTheme(s.termTheme, s.termImported)
         p.fit.fit()
       }
     },

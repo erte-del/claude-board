@@ -7,6 +7,7 @@ const api = {
   copyText: (text: string): Promise<void> => ipcRenderer.invoke('copyText', text), // for OSC 52 copy requests from a chat
   exportLayout: (layout: Layout): Promise<{ ok: true; path: string } | { ok: false; error?: string }> => ipcRenderer.invoke('exportLayout', layout),
   importLayout: (): Promise<{ ok: true; layout: Layout } | { ok: false; error?: string }> => ipcRenderer.invoke('importLayout'),
+  importTermColors: (): Promise<{ ok: true; name: string; theme: Record<string, string> } | { ok: false; error?: string }> => ipcRenderer.invoke('importTermColors'),
   tourSeen: (): Promise<boolean> => ipcRenderer.invoke('tourSeen'),
   markTourSeen: (): Promise<void> => ipcRenderer.invoke('markTourSeen'),
   editors: (): Promise<{ id: string; label: string }[]> => ipcRenderer.invoke('editors'),

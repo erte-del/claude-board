@@ -174,7 +174,7 @@ badge: the number of chats waiting, or `!` while a limit is hit. Nothing is show
 
 **Interrupted:** when you stop a turn with Esc or Ctrl+C (or refuse a tool), Claude Code writes a marker into the transcript; the idle card then says `interrupted` instead of `— t/s` until the next message, so you can tell "I stopped it" from "it finished". The colour stays idle.
 
-**Terminal colours:** Customize → *Terminal colours* has Default, Dracula, Solarized Dark, One Dark, GitHub Dark, macOS Dark (Pro) and macOS Light (Basic). It recolours the chat terminal (background, text, cursor, selection and the 16 ANSI colours) and the pane around it, live. The palettes are typed in by hand from the published themes, so a shade may differ slightly from the original; importing an iTerm `.itermcolors` file isn't supported yet.
+**Terminal colours:** Customize → *Terminal colours* has Default, Dracula, Solarized Dark, One Dark, GitHub Dark, macOS Dark (Pro) and macOS Light (Basic). It recolours the chat terminal (background, text, cursor, selection and the 16 ANSI colours) and the pane around it, live. The palettes are typed in by hand from the published themes, so a shade may differ slightly from the original. **Import iTerm…** next to the picker loads an iTerm `.itermcolors` file (background, text, cursor, selection and the 16 ANSI colours; the colour space is read as sRGB) and selects it; the last import is kept as *Imported: name*, and a file without the background, text or all 16 ANSI colours is refused.
 
 **Copy and select in a chat:** when Claude Code copies something (it does this with OSC 52 escape codes, which Terminal.app ignores), the text goes onto the macOS clipboard. Programs can only write to the clipboard, never read it; switch it off with *Let chats copy to the clipboard* in Customize. While Claude Code is using the mouse, hold **Shift** (or Option) and drag to select text instead, then ⌘C.
 
@@ -213,8 +213,8 @@ badge: the number of chats waiting, or `!` while a limit is hit. Nothing is show
 The branch row reads `folder · ⎇ branch` (hover for the full path). Under it each card shows **ctx 47%** with a small meter (it turns orange at 80% and red at 95%) and **~$1.23**.
 Context is the size of the chat's latest request against the model's window (1M for all four current models; unknown models
 show raw tokens). Cost is estimated from the transcript's token usage, sub-agents included. It is shown **only for models whose
-price was verified**: currently Sonnet 5.5, where the estimate matched Claude Code's own total to the cent on recent sessions, and Haiku 5.5 (solved from three of Claude Code's own session totals; it has no price for 5-minute cache writes, which never showed up, so a Haiku message that used them shows `—`). Opus 5.5 and Fable 5.1 have no price: there was no Claude Code total on this machine to check them against
-(`src/pricing.mts` records how, and one wrinkle: the cache-read price there is half of the published table's). For other
+price was verified**: currently Sonnet 5.5, where the estimate matched Claude Code's own total to the cent on recent sessions, Haiku 5.5 (solved from three of Claude Code's own session totals) and Opus 5.5 (solved from five projects' totals, all matching to the cent). Haiku and Opus have no price for 5-minute cache writes, which never showed up, so a message that used them shows `—`. Fable 5.1 has no price: there was no Claude Code total on this machine to check it against
+(`src/pricing.mts` records how, and one wrinkle: the cache-read price there is half of the published table's for Sonnet). For other
 models the cost shows `—`; add a price to `PRICES` once you can verify it. Hover the row for exact numbers.
 
 ### Card colours
