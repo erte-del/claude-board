@@ -150,7 +150,7 @@ test('usage: one entry per message id (blocks repeat the totals), context = late
 
 test('cost is withheld (null) for a model without a verified price, but context still works', () => {
   const s = new TranscriptState()
-  s.apply({ type: 'assistant', timestamp: '2026-01-01T00:00:01.000Z', message: { id: 'm', model: 'claude-opus-5-5', content: [], usage: { input_tokens: 5, output_tokens: 5, cache_read_input_tokens: 1000 } } })
+  s.apply({ type: 'assistant', timestamp: '2026-01-01T00:00:01.000Z', message: { id: 'm', model: 'claude-fable-5-1', content: [], usage: { input_tokens: 5, output_tokens: 5, cache_read_input_tokens: 1000 } } })
   assert.equal(s.costUSD(), null)
   assert.equal(s.contextTokens(), 1005)
   assert.equal(new TranscriptState().costUSD(), null) // nothing yet

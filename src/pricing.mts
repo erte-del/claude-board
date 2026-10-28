@@ -13,10 +13,13 @@ export const CONTEXT_WINDOW: Record<string, number> = {
 // write5m is null when no 5-minute cache writes were ever seen in the checking data: such a message then has no cost rather than a guess.
 // Haiku 5.5, solved from three of Claude Code's `lastModelUsage` totals in ~/.claude.json (two tiny no-cache sessions give in and out
 // exactly; the third, with 1h cache writes and reads, then reconciles to the cent fraction): in $0.10, out $0.50, read $0.01, 1h write $0.20.
-// Opus 5.5 and Fable 5.1 have no cost-state data on this machine, so they have no price.
+// Opus 5.5, solved from the `lastModelUsage` totals of five Opus-only projects in ~/.claude.json: in $4, out $20, read $0.20, cache write $8
+// (the 1h rate, 2x input; all five fit to the cent, so the writes were 1h). 5-minute writes never showed up, so no price for them.
+// Fable 5.1 has no cost-state data on this machine, so it has no price.
 export type Price = { in: number; out: number; read: number; write1h: number; write5m: number | null }
 export const PRICES: Record<string, Price> = {
   'claude-sonnet-5-5': { in: 2, out: 10, read: 0.1, write1h: 4, write5m: 2.5 },
+  'claude-opus-5-5': { in: 4, out: 20, read: 0.2, write1h: 8, write5m: null },
   'claude-haiku-5-5': { in: 0.1, out: 0.5, read: 0.01, write1h: 0.2, write5m: null },
 }
 
