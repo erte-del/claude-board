@@ -23,6 +23,7 @@ export type ChatInfo = {
   crashed: boolean // ended with an error exit (not killed by the user): the card offers Restart
   permMode: PermMode | null // from Claude Code's status line; null until it has been seen
   prompt: string | null // a tool-permission question the card can answer with Yes / No buttons, while waiting on one
+  autoTitle: string | null // Claude Code's own short name for the chat; shown when the user hasn't named the card
   resumable: boolean // ended (or restored from a previous run) and has a transcript, so a click can resume it
 }
 export type Pt = { x: number; y: number }

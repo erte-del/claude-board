@@ -17,7 +17,7 @@ import { staleImages } from './pasteimg.mts'
 import { planRestart } from './restart.mts'
 import { openingArgs, resolveDir } from './paths.mts'
 import { sanitizeRegistry, type RegEntry } from './registry.mts'
-import { SubagentWatcher, Tailer } from './tailer.mts'
+import { shortTitle, SubagentWatcher, Tailer } from './tailer.mts'
 import { modelFromScreen, dialogKind, permissionMode, permissionPrompt, waitingForUser, type PermMode, type WaitKind } from './screen.mts'
 import { createLogger } from './logger.mts'
 import { isWorking, newActivity, record, type Activity } from './activity.mts'
@@ -139,12 +139,14 @@ function bannerModel(c: Chat): string | null {
 const dialogText = (c: Chat, forButtons = false) =>
   screenBottom(c, forButtons ? 30 : 14).map((l) => l.trim()).filter((l) => l && !/^[─━│╭╮╰╯╌\s]+$/.test(l) && !(forButtons && /^[❯>]?\s*\d+\.\s/.test(l))).slice(-8)
 
+const nameFor = (c: Chat) => titles[c.sessionId] ?? shortTitle(c.tailer.state.title) ?? undefined // the user's name, else Claude Code's own
+
 const summary = (c: Chat): ChatInfo => {
   const t = c.tailer.state
   // A blocking dialog isn't in the transcript yet, so show what is on screen: that is what the user is being asked.
   const prompt = c.status === 'waiting' ? permissionPrompt(screenBottom(c, 30))?.question ?? null : null
   const feed = c.status === 'waiting' ? dialogText(c, prompt !== null) : t.feed
-  return { id: c.id, cwd: c.cwd, sessionId: c.sessionId, status: c.status, model: t.model ?? bannerModel(c), branch: t.branch ?? c.gitBranch, tps: t.tps, feed: c.endNote ?? feed, subagents: subagentsOf(c), ...usageOf(t, c.subs), limitResetAt: c.status === 'limit' ? limitResetAt : null, permMode: c.permMode, interrupted: c.status === 'idle' && t.interrupted, waitKind: c.waitKind, stalled: c.status === 'working' && isStalled({ status: c.status, workingSince: c.workingSince, lastGrowth: Math.max(c.tailer.lastGrowth, c.subs.lastGrowth()) }, Date.now(), stallMinutes), crashed: c.crashed, prompt, resumable: c.status === 'ended' && c.tailer.exists }
+  return { id: c.id, cwd: c.cwd, sessionId: c.sessionId, status: c.status, model: t.model ?? bannerModel(c), branch: t.branch ?? c.gitBranch, tps: t.tps, feed: c.endNote ?? feed, subagents: subagentsOf(c), ...usageOf(t, c.subs), limitResetAt: c.status === 'limit' ? limitResetAt : null, permMode: c.permMode, interrupted: c.status === 'idle' && t.interrupted, waitKind: c.waitKind, stalled: c.status === 'working' && isStalled({ status: c.status, workingSince: c.workingSince, lastGrowth: Math.max(c.tailer.lastGrowth, c.subs.lastGrowth()) }, Date.now(), stallMinutes), crashed: c.crashed, prompt, autoTitle: shortTitle(t.title), resumable: c.status === 'ended' && c.tailer.exists }
 }
 
 // A running sub-agent is working by definition; it is only "waiting" when the parent is blocked on a dialog and this one has a pending tool.
@@ -169,7 +171,7 @@ function usageOf(t: Tailer['state'], subs: SubagentWatcher) {
 
 const dormantInfo = (d: Dormant): ChatInfo => {
   const t = d.tailer.state
-  return { id: d.id, cwd: d.cwd, sessionId: d.sessionId, status: 'ended', model: t.model, branch: t.branch, tps: t.tps, feed: t.feed.slice(-4), subagents: [], ...usageOf(t, d.subs), limitResetAt: null, permMode: null, interrupted: false, waitKind: null, stalled: false, crashed: false, prompt: null, resumable: true }
+  return { id: d.id, cwd: d.cwd, sessionId: d.sessionId, status: 'ended', model: t.model, branch: t.branch, tps: t.tps, feed: t.feed.slice(-4), subagents: [], ...usageOf(t, d.subs), limitResetAt: null, permMode: null, interrupted: false, waitKind: null, stalled: false, crashed: false, prompt: null, autoTitle: shortTitle(t.title), resumable: true }
 }
 const allInfos = () => [...chats.values()].map(summary).concat([...dormant.values()].map(dormantInfo))
 const notifyChanged = () => {
@@ -354,7 +356,7 @@ function setAwake(on: boolean) {
 
 function ctxWarnings(live: Chat[], enabled: boolean, watching: (id: string) => boolean) {
   const pct = (c: Chat) => { const t = c.tailer.state.contextTokens(), w = CONTEXT_WINDOW[c.tailer.state.lastModel() ?? '']; return t !== null && w ? (t / w) * 100 : null }
-  const { plans, levels } = planContext(live.map((c) => ({ id: c.id, cwd: c.cwd, name: titles[c.sessionId], pct: pct(c), level: c.ctxLevel })), { enabled, watching })
+  const { plans, levels } = planContext(live.map((c) => ({ id: c.id, cwd: c.cwd, name: nameFor(c), pct: pct(c), level: c.ctxLevel })), { enabled, watching })
   for (const c of live) if (pct(c) !== null) c.ctxLevel = levels.get(c.id) ?? c.ctxLevel // stays unseen until there is a usage figure
   return plans
 }
@@ -367,12 +369,12 @@ function attend(live: Chat[], limited: boolean) {
   const enabled = notifyOn && !quiet && Notification.isSupported()
   const plans = [
     ...planNotifications(
-      live.map((c) => ({ id: c.id, cwd: c.cwd, name: titles[c.sessionId], status: c.status, prev: c.prev, kind: c.waitKind, detail: c.status === 'limit' ? (c.tailer.state.limit ?? '') : dialogText(c).slice(0, 3).join(' · ') })),
+      live.map((c) => ({ id: c.id, cwd: c.cwd, name: nameFor(c), status: c.status, prev: c.prev, kind: c.waitKind, detail: c.status === 'limit' ? (c.tailer.state.limit ?? '') : dialogText(c).slice(0, 3).join(' · ') })),
       { enabled, watching },
     ),
     ...ctxWarnings(live, enabled, watching),
     ...planFinished(
-      live.map((c) => ({ id: c.id, cwd: c.cwd, name: titles[c.sessionId], status: c.status, prev: c.prev, reply: c.tailer.state.lastReply, seen: c.seenReply, muted: muted[c.sessionId] })),
+      live.map((c) => ({ id: c.id, cwd: c.cwd, name: nameFor(c), status: c.status, prev: c.prev, reply: c.tailer.state.lastReply, seen: c.seenReply, muted: muted[c.sessionId] })),
       { enabled: enabled && notifyPrefs.finish, watching },
     ),
   ]

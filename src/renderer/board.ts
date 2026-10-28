@@ -89,11 +89,11 @@ export function createBoard(root: HTMLElement, h: Handlers) {
   }
 
   // size of a card, including the name line when it has one (or is being named)
-  const sz = (c: ChatInfo) => sizeOf(c, !!layout.titles[c.sessionId] || editing === c.sessionId, !!layout.notes?.[c.sessionId] || editingNote === c.sessionId)
+  const sz = (c: ChatInfo) => sizeOf(c, !!(layout.titles[c.sessionId] ?? c.autoTitle) || editing === c.sessionId, !!layout.notes?.[c.sessionId] || editingNote === c.sessionId)
 
   // ---- filter: collapsed folders and "hide ended" remove cards; the search text dims the cards that don't match
   const isVisible = (c: ChatInfo) => !layout.collapsed[c.cwd] && !(layout.hideEnded && c.status === 'ended')
-  const searchable = (c: ChatInfo) => [layout.titles[c.sessionId], layout.notes?.[c.sessionId], base(c.cwd), c.cwd, c.model, c.branch, ...c.feed, ...c.subagents.flatMap((s) => [s.title, ...s.feed])]
+  const searchable = (c: ChatInfo) => [layout.titles[c.sessionId] ?? c.autoTitle, layout.notes?.[c.sessionId], base(c.cwd), c.cwd, c.model, c.branch, ...c.feed, ...c.subagents.flatMap((s) => [s.title, ...s.feed])]
   const filtering = () => query !== '' || statuses.size > 0
   const isMatch = (c: ChatInfo) => matches(query, searchable(c)) && statusMatches(statuses, c.status)
   const shown = () => chats.filter(isVisible)
@@ -468,7 +468,7 @@ export function createBoard(root: HTMLElement, h: Handlers) {
       const fresh = !e
       if (!e) cards.set(c.sessionId, (e = makeCard(c.sessionId)))
       const p = cardAt(c), hub = hubOf(c.cwd), size = sz(c)
-      const title = layout.titles[c.sessionId]
+      const title = layout.titles[c.sessionId] ?? c.autoTitle
       const isEditing = editing === c.sessionId
       e.name.textContent = title ?? ''
       e.name.hidden = !title || isEditing

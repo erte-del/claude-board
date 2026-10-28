@@ -62,8 +62,10 @@ let line = ''
 let dialogUp = 4 // lines to move up from the cursor to the first line of the dialog on screen
 let mode = 'input' // 'input' | 'dialog' | 'busy'
 
+let titled = resumed
 function reply(text) {
   assistant(text)
+  if (!titled) { titled = true; append({ type: 'ai-title', aiTitle: 'Greeting the stub claude today' }) } // the real one names the chat after the first reply
   write(`\r\x1b[K● ${text}\r\n`)
   mode = 'input'
   prompt()

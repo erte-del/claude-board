@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { SubagentWatcher, Tailer, TranscriptState } from './tailer.mts'
+import { shortTitle, SubagentWatcher, Tailer, TranscriptState } from './tailer.mts'
 
 const user = (ts: string, content: unknown = 'hi') => ({ type: 'user', timestamp: ts, message: { content } })
 const asst = (ts: string, content: unknown[], extra: object = {}) =>
@@ -196,4 +196,21 @@ test('interrupted: the user stopping a turn is the newest thing until anything e
   assert.equal(s.interrupted, false)
   s.apply({ ...user('[Request interrupted by user]'), message: { role: 'user', content: '[Request interrupted by user]' } }) // plain-string content too
   assert.equal(s.interrupted, true)
+})
+
+test('the chat title comes from Claude Code; /rename beats the generated one and is not overwritten by it', () => {
+  const s = new TranscriptState()
+  assert.equal(s.title, null)
+  s.apply({ type: 'ai-title', aiTitle: 'Fix login redirect loop' })
+  assert.equal(s.title, 'Fix login redirect loop')
+  s.apply({ type: 'custom-title', customTitle: 'Auth work' })
+  s.apply({ type: 'ai-title', aiTitle: 'Something newer' })
+  assert.equal(s.title, 'Auth work')
+})
+
+test('shortTitle caps at four words and treats blank as no title', () => {
+  assert.equal(shortTitle('Claude Board idle chats flashing working'), 'Claude Board idle chats')
+  assert.equal(shortTitle('  Two words '), 'Two words')
+  assert.equal(shortTitle('   '), null)
+  assert.equal(shortTitle(null), null)
 })

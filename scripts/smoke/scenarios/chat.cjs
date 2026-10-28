@@ -26,6 +26,10 @@ module.exports = async function (t) {
   t.check('cost is estimated from usage at verified prices ($0.0065 per reply)', Math.abs(c.costUSD - 0.0065) < 1e-9, c.costUSD)
   t.check('the card shows ctx % and cost', (await t.text('.card .use')).includes('ctx 2%') && (await t.text('.card .use')).includes('~$0.01'), await t.text('.card .use'))
 
+  // ---- the card is named by Claude Code's own chat title, capped to four words; a name the user gives wins
+  { const name = () => t.js(`(()=>{const n=document.querySelector('.card .name'); return n && !n.hidden ? n.textContent : null})()`)
+    t.check('an unnamed card shows the chat title Claude Code wrote, cut to four words', !!(await t.waitFor(async () => (await name()) === 'Greeting the stub claude', { timeout: 5000 })), JSON.stringify(await name())) }
+
   // ---- working -> idle
   await t.say(id, 'sleep 3')
   t.check('status is "working" while the chat produces output', !!(await t.waitFor(async () => (await info(id)).status === 'working', { timeout: 4000, every: 150 })))

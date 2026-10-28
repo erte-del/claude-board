@@ -14,6 +14,9 @@ export const isInterruptMarker = (content: unknown): boolean => {
   return texts.some((x) => typeof x === 'string' && x.startsWith('[Request interrupted by user'))
 }
 
+/** Claude Code names every chat itself (an `ai-title` entry, or `custom-title` after /rename): reuse that, capped to a few words for the card. */
+export const shortTitle = (t: string | null, words = 4): string | null => t?.trim().split(/\s+/).slice(0, words).join(' ') || null
+
 /** What a card shows, folded out of a session's transcript entries one at a time. */
 export class TranscriptState {
   model: string | null = null
@@ -24,6 +27,8 @@ export class TranscriptState {
   interrupted = false // the newest thing in the transcript is the user stopping the turn
   lastReply: string | null = null // the newest assistant text, in full (the card feed clips it)
   limit: string | null = null // set while the newest assistant entry is a rate-limit notice
+  title: string | null = null // Claude Code's own name for the chat (custom-title beats ai-title)
+  private custom = false
   limitResetAt: number | null = null // when that limit lifts (epoch ms), read from the notice; null if it gave no time
   private prevTs = 0
   // Final usage per assistant message (a message is written once per content block, each carrying the same totals).
@@ -65,7 +70,9 @@ export class TranscriptState {
     if (typeof e.gitBranch === 'string' && e.gitBranch) this.branch = e.gitBranch
     const ts = Date.parse(e.timestamp)
 
-    if (e.type === 'user') {
+    if (e.type === 'custom-title' && typeof e.customTitle === 'string' && e.customTitle) { this.title = e.customTitle; this.custom = true }
+    else if (e.type === 'ai-title' && typeof e.aiTitle === 'string' && e.aiTitle && !this.custom) this.title = e.aiTitle
+    else if (e.type === 'user') {
       const c = e.message?.content
       if (!e.isMeta) this.interrupted = isInterruptMarker(c)
       if (Array.isArray(c)) for (const b of c) if (b?.type === 'tool_result') this.pending.delete(b.tool_use_id)

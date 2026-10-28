@@ -27,7 +27,7 @@ let settings: Settings = defaultSettings
 let lastChatId: string | null = null // the chat you were last viewing: shift-click opens another beside it
 
 const base = (p: string) => p.split('/').filter(Boolean).pop() ?? p
-const nameOf = (c: ChatInfo) => board.titleOf(c.sessionId) ?? base(c.cwd)
+const nameOf = (c: ChatInfo) => board.titleOf(c.sessionId) ?? c.autoTitle ?? base(c.cwd)
 
 // ---- terminal fonts: Terminal.app's SF Mono, the system's monospace fonts, and any font files in ~/Library/Fonts
 // (Chromium can't use those by name, so each file is loaded as a web font and kept only if it really is monospace)
