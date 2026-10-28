@@ -22,6 +22,7 @@ import { shortTitle, SubagentWatcher, Tailer } from './tailer.mts'
 import { modelFromScreen, dialogKind, permissionMode, permissionPrompt, waitingForUser, type PermMode, type WaitKind } from './screen.mts'
 import { createLogger } from './logger.mts'
 import { isWorking, newActivity, record, type Activity } from './activity.mts'
+import { appendReplay } from './replaybuf.mts'
 import { badgeText, isStalled, inQuietHours, planContext, planFinished, planLimitReset, planNotifications, wantAwake, type CtxLevel } from './attention.mts'
 import { CONTEXT_WINDOW } from './pricing.mts'
 import { restoreBounds } from './windowstate.mts'
@@ -208,8 +209,7 @@ function spawnChat(folder: string, args: string[], sessionId: string, resumed = 
   // Branch for the card before the first transcript entry exists.
   execFile('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], (err, out) => { if (!err) chat.gitBranch = out.trim() })
   p.onData((d) => {
-    // shortcut: slicing can cut an escape sequence in half at the buffer head; harmless in practice, fix if replay glitches
-    chat.buffer = (chat.buffer + d).slice(-MAX_BUFFER)
+    chat.buffer = appendReplay(chat.buffer, d, MAX_BUFFER)
     chat.screen.write(d)
     record(chat.activity, Date.now(), chat.lastInput)
     if (attached.has(id)) send('pty:data', id, d)
