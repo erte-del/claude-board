@@ -59,7 +59,7 @@ let passed = 0, failed = 0
 const failures = []
 
 let lingered = 0 // apps that finished their scenario but did not exit by themselves (killed after a grace period)
-function runScenario(name, strictQuit = false, timeoutMs = 150_000) {
+function runScenario(name, strictQuit = false, timeoutMs = 240_000) { // chat alone runs ~125s; this only catches hangs
   return new Promise((resolve) => {
     console.log(`\n${name}`)
     const { home, data } = dirsFor(name)
