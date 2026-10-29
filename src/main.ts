@@ -22,7 +22,7 @@ import { shortTitle, SubagentWatcher, Tailer } from './tailer.mts'
 import { modelFromScreen, dialogKind, permissionMode, permissionPrompt, waitingForUser, type PermMode, type WaitKind } from './screen.mts'
 import { createLogger } from './logger.mts'
 import { isWorking, newActivity, record, type Activity } from './activity.mts'
-import { appendReplay } from './replaybuf.mts'
+import { appendReplay, modePrefix } from './replaybuf.mts'
 import { badgeText, isStalled, inQuietHours, planContext, planFinished, planLimitReset, planNotifications, wantAwake, type CtxLevel } from './attention.mts'
 import { CONTEXT_WINDOW } from './pricing.mts'
 import { restoreBounds } from './windowstate.mts'
@@ -44,6 +44,7 @@ type Chat = {
   tailer: Tailer
   subs: SubagentWatcher
   screen: Terminal // headless mirror of the pty, used to read what is on screen
+  modes: Map<number, boolean> // private modes (DECSET) the chat has set, replayed when it is opened
   gitBranch: string | null
   prev?: Status // status at the previous tick, to spot transitions
   killed: boolean // ended because the user killed it
@@ -204,7 +205,11 @@ function spawnChat(folder: string, args: string[], sessionId: string, resumed = 
   const p = pty.spawn(claudePath, args, { name: 'xterm-256color', cols: 80, rows: 24, cwd, env })
   log(`start pid=${p.pid} cwd=${cwd} ${args.join(' ')}`)
   const file = transcriptFile(cwd, sessionId)
-  const chat: Chat = { id, pty: p, cwd, sessionId, status: 'working', buffer: '', activity: newActivity(), lastInput: 0, tailer: new Tailer(file), subs: new SubagentWatcher(path.join(path.dirname(file), sessionId, 'subagents')), screen: new Terminal({ cols: 80, rows: 24, allowProposedApi: true }), gitBranch: null, killed: false, seenReply: null, workingSince: null, forked: false, ctxLevel: null, waitKind: null, crashed: false, endNote: null, screenModel: null, permMode: null, prev: undefined }
+  const chat: Chat = { id, pty: p, cwd, sessionId, status: 'working', buffer: '', activity: newActivity(), lastInput: 0, tailer: new Tailer(file), subs: new SubagentWatcher(path.join(path.dirname(file), sessionId, 'subagents')), screen: new Terminal({ cols: 80, rows: 24, allowProposedApi: true }), modes: new Map(), gitBranch: null, killed: false, seenReply: null, workingSince: null, forked: false, ctxLevel: null, waitKind: null, crashed: false, endNote: null, screenModel: null, permMode: null, prev: undefined }
+  for (const final of ['h', 'l']) chat.screen.parser.registerCsiHandler({ prefix: '?', final }, (ps) => {
+    for (const n of ps) if (typeof n === 'number') chat.modes.set(n, final === 'h')
+    return false // let the mirror apply it too
+  })
   if (resumed) { chat.tailer.catchUp(); chat.subs.catchUp() } // history is shown; its stale limit / pending-tool state is not
   // Branch for the card before the first transcript entry exists.
   execFile('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], (err, out) => { if (!err) chat.gitBranch = out.trim() })
@@ -428,7 +433,9 @@ ipcMain.handle('openChat', (_e, id: string) => {
   const c = chats.get(id)
   if (!c) return null
   attached.add(id)
-  return c.buffer
+  // On the alternate screen (Claude Code's fullscreen mode) the tail is stale frames that leave fragments behind; the resize
+  // the renderer sends next makes Claude Code draw the whole screen anyway.
+  return modePrefix(c.modes) + (c.screen.buffer.active.type === 'alternate' ? '' : c.buffer)
 })
 ipcMain.handle('listChats', () => allInfos())
 ipcMain.handle('forkChat', async (_e, sessionId: string) => { await envReady; return forkChat(sessionId) })
